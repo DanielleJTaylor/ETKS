@@ -1,198 +1,472 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Works, WorkFiles, uploadToStorage } from "../../lib/api";
 
-// ─── COMIC SECTION ────────────────────────────────────────────────────────────
-export function ComicSection({ work, isOwner, session }) {
-  const [pages, setPages] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [uploading, setUploading] = useState(false);
-  const [error, setError] = useState("");
+// ─── SHARED HELPERS ───────────────────────────────────────────────────────────
+function parseChapterMeta(raw) {
+  if (!raw) return [{ id: "ch1", title: "Chapter 1" }];
+  try {
+    const p = JSON.parse(raw);
+    if (p.chapters && Array.isArray(p.chapters)) return p.chapters.map(c => ({ id: c.id, title: c.title }));
+  } catch {}
+  return [{ id: "ch1", title: "Chapter 1" }];
+}
 
+function saveChapterMeta(token, workId, chapters) {
+  return Works.update(token, workId, { content: JSON.stringify({ chapters }) });
+}
+
+// ─── SHARED SIDEBAR ──────────────────────────────────────────────────────────
+function ChapterSidebar({ chapters, activeIdx, onSwitch, onAdd, onRename, onDelete, workTitle, canEdit, onExitEdit }) {
+  const [editingId, setEditingId] = useState(null);
+  const [editVal, setEditVal]     = useState("");
+
+  return (
+    <div style={{ width: 200, background: "#2c2c2c", color: "#e0e0e0", display: "flex", flexDirection: "column", flexShrink: 0 }}>
+      <div style={{ padding: "12px 14px", borderBottom: "1px solid #3a3a3a" }}>
+        <div style={{ fontFamily: "'Playfair Display',Georgia,serif", fontSize: 12, fontWeight: 700, color: "#fff", lineHeight: 1.3, marginBottom: canEdit ? 8 : 0 }}>
+          {workTitle}
+        </div>
+        {canEdit && onExitEdit && (
+          <button onClick={onExitEdit}
+            style={{ width: "100%", padding: "5px 8px", background: "#3a3a3a", border: "none", color: "#ccc", cursor: "pointer", fontSize: 11, textAlign: "left", borderRadius: 3 }}
+            onMouseEnter={e => e.currentTarget.style.background = "#4a4a4a"}
+            onMouseLeave={e => e.currentTarget.style.background = "#3a3a3a"}>
+            ← Back to Viewer
+          </button>
+        )}
+      </div>
+
+      <div style={{ flex: 1, overflowY: "auto", padding: "6px 0" }}>
+        <div style={{ padding: "5px 14px 3px", fontSize: 10, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: "#666" }}>Chapters</div>
+        {chapters.map((c, i) => (
+          <div key={c.id} onClick={() => onSwitch(i)}
+            style={{ padding: "7px 14px", cursor: "pointer", background: i === activeIdx ? "#3d3d3d" : "transparent", borderLeft: i === activeIdx ? "3px solid #c8001e" : "3px solid transparent", display: "flex", alignItems: "center", gap: 4 }}
+            onMouseEnter={e => { if (i !== activeIdx) e.currentTarget.style.background = "#333"; }}
+            onMouseLeave={e => { if (i !== activeIdx) e.currentTarget.style.background = "transparent"; }}>
+            {editingId === c.id ? (
+              <input autoFocus value={editVal}
+                onChange={e => setEditVal(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") { onRename(c.id, editVal); setEditingId(null); } if (e.key === "Escape") setEditingId(null); }}
+                onBlur={() => { onRename(c.id, editVal); setEditingId(null); }}
+                onClick={e => e.stopPropagation()}
+                style={{ flex: 1, background: "#555", border: "1px solid #c8001e", color: "#fff", fontSize: 12, padding: "2px 5px", outline: "none", borderRadius: 2 }} />
+            ) : (
+              <span style={{ fontSize: 12, color: i === activeIdx ? "#fff" : "#bbb", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {i + 1}. {c.title}
+              </span>
+            )}
+            {canEdit && editingId !== c.id && (
+              <button onClick={e => { e.stopPropagation(); setEditingId(c.id); setEditVal(c.title); }}
+                style={{ background: "none", border: "none", color: "#666", cursor: "pointer", fontSize: 11, padding: "1px 3px", flexShrink: 0 }} title="Rename">✏</button>
+            )}
+            {canEdit && chapters.length > 1 && editingId !== c.id && (
+              <button onClick={e => { e.stopPropagation(); if (confirm(`Delete "${c.title}"?`)) onDelete(i); }}
+                style={{ background: "none", border: "none", color: "#666", cursor: "pointer", fontSize: 13, padding: "1px 3px", flexShrink: 0 }} title="Delete">×</button>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {canEdit && (
+        <button onClick={onAdd}
+          style={{ padding: "9px 14px", background: "none", border: "none", borderTop: "1px solid #3a3a3a", color: "#888", cursor: "pointer", textAlign: "left", fontSize: 12, fontFamily: "inherit" }}
+          onMouseEnter={e => e.currentTarget.style.color = "#ccc"} onMouseLeave={e => e.currentTarget.style.color = "#888"}>
+          + Add Chapter
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ─── COMIC SECTION ────────────────────────────────────────────────────────────
+export function ComicSection({ work, canEdit, session }) {
+  const [chapters, setChapters]   = useState(() => parseChapterMeta(work.content));
+  const [activeIdx, setActiveIdx] = useState(0);
+  const [files, setFiles]         = useState({});   // { chapterId: [file,...] }
+  const [loading, setLoading]     = useState(true);
+  const [uploading, setUploading] = useState(false);
+  const [editMode, setEditMode]   = useState(false);
+  const [error, setError]         = useState("");
+
+  const ch = chapters[activeIdx];
+
+  // Load all files grouped by chapter
   useEffect(() => {
     WorkFiles.fetch(work.id).then(({ data }) => {
-      setPages(data.filter(f => f.file_type === "comic_page"));
+      const grouped = {};
+      (data || []).filter(f => f.file_type === "comic_page").forEach(f => {
+        const cid = f.chapter_id || "ch1";
+        if (!grouped[cid]) grouped[cid] = [];
+        grouped[cid].push(f);
+      });
+      setFiles(grouped);
       setLoading(false);
     });
   }, [work.id]);
 
-  const handleFiles = async (files) => {
+  const chFiles = files[ch?.id] || [];
+
+  const addChapter = async () => {
+    const newCh = { id: `ch${Date.now()}`, title: `Chapter ${chapters.length + 1}` };
+    const updated = [...chapters, newCh];
+    setChapters(updated);
+    setActiveIdx(updated.length - 1);
+    await saveChapterMeta(session.access_token, work.id, updated);
+  };
+
+  const renameChapter = async (id, title) => {
+    const updated = chapters.map(c => c.id === id ? { ...c, title } : c);
+    setChapters(updated);
+    await saveChapterMeta(session.access_token, work.id, updated);
+  };
+
+  const deleteChapter = async (idx) => {
+    const updated = chapters.filter((_, i) => i !== idx);
+    setChapters(updated);
+    setActiveIdx(Math.min(activeIdx, updated.length - 1));
+    await saveChapterMeta(session.access_token, work.id, updated);
+  };
+
+  const handleUpload = async (fileList) => {
     if (!session) return;
     setUploading(true); setError("");
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      const path = `${work.id}/comic/${Date.now()}_${i}_${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+    const existing = chFiles.length;
+    for (let i = 0; i < fileList.length; i++) {
+      const file = fileList[i];
+      const path = `${work.id}/comic/${ch.id}/${Date.now()}_${i}_${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
       const { url, error: err } = await uploadToStorage(session.access_token, "work-files", path, file);
       if (err) { setError(err); break; }
-      if (url) {
-        const { data } = await WorkFiles.add(session.access_token, work.id, session.user.id, "comic_page", url, file.name, pages.length + i);
-        if (data) setPages(prev => [...prev, data]);
-      }
+      const { data } = await WorkFiles.add(session.access_token, work.id, session.user.id, "comic_page", url, file.name, existing + i, ch.id);
+      if (data) setFiles(prev => ({ ...prev, [ch.id]: [...(prev[ch.id] || []), data] }));
     }
     setUploading(false);
   };
 
   const deletePage = async (fileId) => {
     await WorkFiles.delete(session.access_token, fileId);
-    setPages(prev => prev.filter(p => p.id !== fileId));
+    setFiles(prev => ({ ...prev, [ch.id]: (prev[ch.id] || []).filter(f => f.id !== fileId) }));
   };
 
-  if (loading) return <div className="page-loading"><span className="spinner" style={{ borderColor: "var(--gray-400)", borderTopColor: "transparent" }} />Loading…</div>;
+  if (loading) return <Spinner />;
 
   return (
-    <div>
-      {error && <div className="warn-banner">⚠ {error}</div>}
-      {isOwner && (
-        <label className="upload-drop-zone" style={{ display: "block", marginBottom: 16 }}>
-          <input type="file" accept="image/*" multiple style={{ display: "none" }} onChange={e => handleFiles(Array.from(e.target.files))} />
-          <div style={{ fontSize: 32 }}>🖼️</div>
-          <div className="upload-drop-label">{uploading ? <><span className="spinner" /> Uploading…</> : "Click or drag to upload comic pages. They appear in order below."}</div>
-        </label>
-      )}
-      {pages.length === 0 && !isOwner && <div style={{ color: "var(--gray-400)", fontStyle: "italic", fontSize: 14 }}>No pages uploaded yet.</div>}
-      {pages.length > 0 && (
-        <div className="comic-strip">
-          {pages.map(p => (
-            <div className="comic-page-wrap" key={p.id}>
-              <img className="comic-page" src={p.file_url} alt={p.file_name || "page"} />
-              {isOwner && <button className="comic-page-delete" onClick={() => deletePage(p.id)}>✕ Remove</button>}
-            </div>
-          ))}
+    <div style={{ display: "flex", border: "1px solid #ddd", minHeight: 500 }}>
+      <ChapterSidebar chapters={chapters} activeIdx={activeIdx} onSwitch={setActiveIdx}
+        onAdd={addChapter} onRename={renameChapter} onDelete={deleteChapter}
+        workTitle={work.title} canEdit={canEdit}
+        onExitEdit={canEdit && editMode ? () => setEditMode(false) : null} />
+
+      <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+        {/* Toolbar */}
+        <div style={{ padding: "8px 16px", background: "#fff", borderBottom: "1px solid #eee", display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontFamily: "'Playfair Display',Georgia,serif", fontSize: 15, fontWeight: 700 }}>{ch?.title}</span>
+          {canEdit && (
+            <button onClick={() => setEditMode(v => !v)} className="btn btn-sm" style={{ marginLeft: "auto" }}>
+              {editMode ? "👁 View" : "✏️ Edit"}
+            </button>
+          )}
         </div>
-      )}
+
+        <div style={{ flex: 1, overflowY: "auto", background: "#f0eeeb", padding: 16 }}>
+          {/* Editor */}
+          {editMode && canEdit && (
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ display: "block", border: "2px dashed #aaa", padding: "24px", textAlign: "center", cursor: "pointer", background: "#fff", borderRadius: 3 }}>
+                <input type="file" accept="image/*" multiple style={{ display: "none" }} onChange={e => handleUpload(Array.from(e.target.files))} />
+                <div style={{ fontSize: 24, marginBottom: 6 }}>🖼️</div>
+                <div style={{ fontSize: 13, color: "#666" }}>{uploading ? "Uploading…" : "Click to upload pages for this chapter"}</div>
+              </label>
+              {error && <div className="warn-banner">{error}</div>}
+            </div>
+          )}
+
+          {/* Viewer */}
+          {chFiles.length === 0 ? (
+            <div style={{ textAlign: "center", padding: "48px 0", color: "#aaa", fontStyle: "italic" }}>No pages uploaded for this chapter yet.</div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", background: "#1a1a1a", gap: 0 }}>
+              {chFiles.map(p => (
+                <div key={p.id} style={{ position: "relative", width: "100%", maxWidth: 800 }}>
+                  <img src={p.file_url} alt={p.file_name || "page"} style={{ width: "100%", display: "block" }} />
+                  {editMode && canEdit && (
+                    <button onClick={() => deletePage(p.id)}
+                      style={{ position: "absolute", top: 8, right: 8, background: "rgba(10,10,10,0.8)", color: "#fff", border: "none", cursor: "pointer", padding: "4px 10px", fontSize: 12, opacity: 0, transition: "opacity 0.15s" }}
+                      onMouseEnter={e => e.currentTarget.style.opacity = 1}
+                      onMouseLeave={e => e.currentTarget.style.opacity = 0}>
+                      ✕ Remove
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Chapter nav */}
+          <ChapterNav idx={activeIdx} total={chapters.length} onPrev={() => setActiveIdx(i => Math.max(0, i-1))} onNext={() => setActiveIdx(i => Math.min(chapters.length-1, i+1))} />
+        </div>
+      </div>
     </div>
   );
 }
 
 // ─── PDF SECTION ──────────────────────────────────────────────────────────────
-export function PDFSection({ work, isOwner, session }) {
-  const [file, setFile]           = useState(null);
-  const [dbFile, setDbFile]       = useState(null);
+export function PDFSection({ work, canEdit, session }) {
+  const [chapters, setChapters]   = useState(() => parseChapterMeta(work.content));
+  const [activeIdx, setActiveIdx] = useState(0);
+  const [files, setFiles]         = useState({});
   const [loading, setLoading]     = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [editMode, setEditMode]   = useState(false);
+  const [staged, setStaged]       = useState(null);
   const [saved, setSaved]         = useState(false);
   const [error, setError]         = useState("");
 
+  const ch = chapters[activeIdx];
+
   useEffect(() => {
     WorkFiles.fetch(work.id).then(({ data }) => {
-      const pdf = data.find(f => f.file_type === "pdf");
-      if (pdf) setDbFile(pdf);
+      const grouped = {};
+      (data || []).filter(f => f.file_type === "pdf").forEach(f => {
+        grouped[f.chapter_id || "ch1"] = f;
+      });
+      setFiles(grouped);
       setLoading(false);
     });
   }, [work.id]);
 
-  const handleFile = (f) => {
-    if (!f || f.type !== "application/pdf") { setError("Please select a PDF file."); return; }
-    setFile(f); setError("");
+  const currentFile = files[ch?.id];
+
+  const addChapter = async () => {
+    const newCh = { id: `ch${Date.now()}`, title: `Chapter ${chapters.length + 1}` };
+    const updated = [...chapters, newCh];
+    setChapters(updated);
+    setActiveIdx(updated.length - 1);
+    await saveChapterMeta(session.access_token, work.id, updated);
+  };
+
+  const renameChapter = async (id, title) => {
+    const updated = chapters.map(c => c.id === id ? { ...c, title } : c);
+    setChapters(updated);
+    await saveChapterMeta(session.access_token, work.id, updated);
+  };
+
+  const deleteChapter = async (idx) => {
+    const updated = chapters.filter((_, i) => i !== idx);
+    setChapters(updated);
+    setActiveIdx(Math.min(activeIdx, updated.length - 1));
+    await saveChapterMeta(session.access_token, work.id, updated);
   };
 
   const upload = async () => {
-    if (!file || !session) return;
+    if (!staged || !session) return;
     setUploading(true); setError(""); setSaved(false);
-    const path = `${work.id}/pdf/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
-    const { url, error: err } = await uploadToStorage(session.access_token, "work-files", path, file);
-    if (err) { setError("Storage error: " + err + " — Make sure the work-files bucket exists and is public."); setUploading(false); return; }
-    if (dbFile) await WorkFiles.delete(session.access_token, dbFile.id);
-    const { data, error: dbErr } = await WorkFiles.add(session.access_token, work.id, session.user.id, "pdf", url, file.name);
-    if (dbErr) { setError("Database error: " + dbErr); setUploading(false); return; }
-    setDbFile(data);
-    setFile(null);
-    setSaved(true);
-    setUploading(false);
+    const path = `${work.id}/pdf/${ch.id}/${Date.now()}_${staged.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+    const { url, error: err } = await uploadToStorage(session.access_token, "work-files", path, staged);
+    if (err) { setError(err); setUploading(false); return; }
+    if (currentFile) await WorkFiles.delete(session.access_token, currentFile.id);
+    const { data, error: dbErr } = await WorkFiles.add(session.access_token, work.id, session.user.id, "pdf", url, staged.name, 0, ch.id);
+    if (dbErr) { setError(dbErr); setUploading(false); return; }
+    setFiles(prev => ({ ...prev, [ch.id]: data }));
+    setStaged(null); setSaved(true); setUploading(false);
     setTimeout(() => setSaved(false), 3000);
   };
 
-  const displayUrl = dbFile?.file_url;
+  if (loading) return <Spinner />;
 
-  if (loading) return <div className="page-loading"><span className="spinner" style={{ borderColor: "var(--gray-400)", borderTopColor: "transparent" }} />Loading…</div>;
+  const displayUrl = currentFile?.file_url;
 
   return (
-    <div>
-      {error && <div className="warn-banner">⚠ {error}</div>}
-      {isOwner && (
-        <div style={{ marginBottom: 16, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-          <label className="btn" style={{ cursor: "pointer" }}>
-            <input type="file" accept="application/pdf" style={{ display: "none" }} onChange={e => handleFile(e.target.files[0])} />
-            📄 {dbFile ? "Replace PDF" : "Upload PDF"}
-          </label>
-          {file && (
-            <button className="btn btn-primary" onClick={upload} disabled={uploading}>
-              {uploading ? <><span className="spinner" /> Uploading…</> : "Save PDF"}
+    <div style={{ display: "flex", border: "1px solid #ddd", minHeight: 500 }}>
+      <ChapterSidebar chapters={chapters} activeIdx={activeIdx} onSwitch={i => { setActiveIdx(i); setStaged(null); }}
+        onAdd={addChapter} onRename={renameChapter} onDelete={deleteChapter}
+        workTitle={work.title} canEdit={canEdit}
+        onExitEdit={canEdit && editMode ? () => setEditMode(false) : null} />
+
+      <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+        <div style={{ padding: "8px 16px", background: "#fff", borderBottom: "1px solid #eee", display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontFamily: "'Playfair Display',Georgia,serif", fontSize: 15, fontWeight: 700 }}>{ch?.title}</span>
+          {canEdit && (
+            <button onClick={() => setEditMode(v => !v)} className="btn btn-sm" style={{ marginLeft: "auto" }}>
+              {editMode ? "👁 View" : "✏️ Edit"}
             </button>
           )}
-          {file && <span style={{ fontSize: 13, color: "var(--gray-600)" }}>{file.name}</span>}
-          {saved && <span style={{ fontSize: 13, color: "#2e8b57", fontWeight: 600 }}>✓ PDF saved — reload to confirm</span>}
-          {dbFile && !file && <span style={{ fontSize: 12, color: "var(--gray-400)", fontFamily: "var(--font-mono)" }}>Saved: {dbFile.file_name}</span>}
         </div>
-      )}
-      {!displayUrl && !isOwner && <div style={{ color: "var(--gray-400)", fontStyle: "italic", fontSize: 14 }}>No PDF uploaded yet.</div>}
-      {displayUrl && (
-        <div className="pdf-viewer-wrap">
-          <div className="pdf-viewer-bar">
-            <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--gray-600)", fontWeight: 600 }}>{dbFile?.file_name || file?.name || "document.pdf"}</span>
-            <a className="btn btn-primary btn-sm" style={{ marginLeft: "auto", textDecoration: "none" }} href={displayUrl} target="_blank" rel="noreferrer">⬇ Download PDF</a>
-          </div>
-          <embed className="pdf-embed" src={displayUrl} type="application/pdf" />
+
+        <div style={{ flex: 1, overflowY: "auto", background: "#f0eeeb", padding: 16 }}>
+          {editMode && canEdit && (
+            <div style={{ marginBottom: 12, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              <label className="btn btn-sm" style={{ cursor: "pointer" }}>
+                <input type="file" accept="application/pdf" style={{ display: "none" }} onChange={e => { const f=e.target.files[0]; if(f&&f.type==="application/pdf"){setStaged(f);setError("");} else setError("Please select a PDF."); }} />
+                📄 {currentFile ? "Replace PDF" : "Upload PDF"}
+              </label>
+              {staged && <button className="btn btn-primary btn-sm" onClick={upload} disabled={uploading}>{uploading?<><span className="spinner"/>Uploading…</>:"Save PDF"}</button>}
+              {staged && <span style={{ fontSize: 13, color: "#666" }}>{staged.name}</span>}
+              {saved && <span style={{ fontSize: 13, color: "#2e8b57", fontWeight: 600 }}>✓ Saved</span>}
+              {currentFile && !staged && <span style={{ fontSize: 12, color: "#aaa", fontFamily: "monospace" }}>Current: {currentFile.file_name}</span>}
+              {error && <span style={{ fontSize: 12, color: "#c8001e" }}>{error}</span>}
+            </div>
+          )}
+
+          {!displayUrl ? (
+            <div style={{ textAlign: "center", padding: "48px 0", color: "#aaa", fontStyle: "italic" }}>No PDF uploaded for this chapter yet.</div>
+          ) : (
+            <div style={{ background: "#fff", border: "1px solid #ddd" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", borderBottom: "1px solid #eee", background: "#f9f9f9" }}>
+                <span style={{ fontFamily: "monospace", fontSize: 11, color: "#666" }}>{currentFile?.file_name || "document.pdf"}</span>
+                <a href={displayUrl} target="_blank" rel="noreferrer" className="btn btn-primary btn-sm" style={{ marginLeft: "auto", textDecoration: "none" }}>⬇ Download</a>
+              </div>
+              <embed src={displayUrl} type="application/pdf" style={{ width: "100%", height: 700, display: "block", border: "none" }} />
+            </div>
+          )}
+
+          <ChapterNav idx={activeIdx} total={chapters.length} onPrev={() => { setActiveIdx(i => Math.max(0,i-1)); setStaged(null); }} onNext={() => { setActiveIdx(i => Math.min(chapters.length-1,i+1)); setStaged(null); }} />
         </div>
-      )}
+      </div>
     </div>
   );
 }
 
 // ─── IMAGE GALLERY ────────────────────────────────────────────────────────────
-export function ImageGallery({ work, isOwner, session }) {
-  const [images, setImages]     = useState([]);
-  const [loading, setLoading]   = useState(true);
+export function ImageGallery({ work, canEdit, session }) {
+  const [chapters, setChapters]   = useState(() => parseChapterMeta(work.content));
+  const [activeIdx, setActiveIdx] = useState(0);
+  const [files, setFiles]         = useState({});
+  const [loading, setLoading]     = useState(true);
   const [uploading, setUploading] = useState(false);
-  const [error, setError]       = useState("");
+  const [editMode, setEditMode]   = useState(false);
+  const [error, setError]         = useState("");
+
+  const ch = chapters[activeIdx];
 
   useEffect(() => {
     WorkFiles.fetch(work.id).then(({ data }) => {
-      setImages(data.filter(f => f.file_type === "image"));
+      const grouped = {};
+      (data || []).filter(f => f.file_type === "image").forEach(f => {
+        const cid = f.chapter_id || "ch1";
+        if (!grouped[cid]) grouped[cid] = [];
+        grouped[cid].push(f);
+      });
+      setFiles(grouped);
       setLoading(false);
     });
   }, [work.id]);
 
-  const handleFiles = async (files) => {
+  const chFiles = files[ch?.id] || [];
+
+  const addChapter = async () => {
+    const newCh = { id: `ch${Date.now()}`, title: `Gallery ${chapters.length + 1}` };
+    const updated = [...chapters, newCh];
+    setChapters(updated); setActiveIdx(updated.length - 1);
+    await saveChapterMeta(session.access_token, work.id, updated);
+  };
+
+  const renameChapter = async (id, title) => {
+    const updated = chapters.map(c => c.id === id ? { ...c, title } : c);
+    setChapters(updated);
+    await saveChapterMeta(session.access_token, work.id, updated);
+  };
+
+  const deleteChapter = async (idx) => {
+    const updated = chapters.filter((_, i) => i !== idx);
+    setChapters(updated); setActiveIdx(Math.min(activeIdx, updated.length - 1));
+    await saveChapterMeta(session.access_token, work.id, updated);
+  };
+
+  const handleUpload = async (fileList) => {
     if (!session) return;
     setUploading(true); setError("");
-    for (const file of files) {
-      const path = `${work.id}/images/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+    const existing = chFiles.length;
+    for (let i = 0; i < fileList.length; i++) {
+      const file = fileList[i];
+      const path = `${work.id}/gallery/${ch.id}/${Date.now()}_${i}_${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
       const { url, error: err } = await uploadToStorage(session.access_token, "work-files", path, file);
       if (err) { setError(err); break; }
-      if (url) {
-        const { data } = await WorkFiles.add(session.access_token, work.id, session.user.id, "image", url, file.name, images.length);
-        if (data) setImages(prev => [...prev, data]);
-      }
+      const { data } = await WorkFiles.add(session.access_token, work.id, session.user.id, "image", url, file.name, existing + i, ch.id);
+      if (data) setFiles(prev => ({ ...prev, [ch.id]: [...(prev[ch.id] || []), data] }));
     }
     setUploading(false);
   };
 
   const deleteImg = async (id) => {
     await WorkFiles.delete(session.access_token, id);
-    setImages(prev => prev.filter(i => i.id !== id));
+    setFiles(prev => ({ ...prev, [ch.id]: (prev[ch.id] || []).filter(f => f.id !== id) }));
   };
 
-  if (loading) return <div className="page-loading"><span className="spinner" style={{ borderColor: "var(--gray-400)", borderTopColor: "transparent" }} />Loading…</div>;
+  if (loading) return <Spinner />;
 
   return (
-    <div>
-      {error && <div className="warn-banner">⚠ {error}</div>}
-      {isOwner && (
-        <label className="upload-drop-zone" style={{ display: "block", marginBottom: 16 }}>
-          <input type="file" accept="image/*" multiple style={{ display: "none" }} onChange={e => handleFiles(Array.from(e.target.files))} />
-          <div style={{ fontSize: 32 }}>🖼️</div>
-          <div className="upload-drop-label">{uploading ? <><span className="spinner" /> Uploading…</> : "Click to upload images."}</div>
-        </label>
-      )}
-      {images.length === 0 && !isOwner && <div style={{ color: "var(--gray-400)", fontStyle: "italic", fontSize: 14 }}>No images uploaded yet.</div>}
-      <div className="image-grid">
-        {images.map(img => (
-          <div className="image-grid-item" key={img.id}>
-            <img src={img.file_url} alt={img.file_name || "image"} />
-            {isOwner && <button className="image-grid-delete" onClick={() => deleteImg(img.id)}>✕</button>}
-          </div>
-        ))}
+    <div style={{ display: "flex", border: "1px solid #ddd", minHeight: 500 }}>
+      <ChapterSidebar chapters={chapters} activeIdx={activeIdx} onSwitch={setActiveIdx}
+        onAdd={addChapter} onRename={renameChapter} onDelete={deleteChapter}
+        workTitle={work.title} canEdit={canEdit}
+        onExitEdit={canEdit && editMode ? () => setEditMode(false) : null} />
+
+      <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+        <div style={{ padding: "8px 16px", background: "#fff", borderBottom: "1px solid #eee", display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontFamily: "'Playfair Display',Georgia,serif", fontSize: 15, fontWeight: 700 }}>{ch?.title}</span>
+          {canEdit && (
+            <button onClick={() => setEditMode(v => !v)} className="btn btn-sm" style={{ marginLeft: "auto" }}>
+              {editMode ? "👁 View" : "✏️ Edit"}
+            </button>
+          )}
+        </div>
+
+        <div style={{ flex: 1, overflowY: "auto", background: "#f0eeeb", padding: 16 }}>
+          {editMode && canEdit && (
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ display: "block", border: "2px dashed #aaa", padding: "24px", textAlign: "center", cursor: "pointer", background: "#fff", borderRadius: 3 }}>
+                <input type="file" accept="image/*" multiple style={{ display: "none" }} onChange={e => handleUpload(Array.from(e.target.files))} />
+                <div style={{ fontSize: 24, marginBottom: 6 }}>🖼️</div>
+                <div style={{ fontSize: 13, color: "#666" }}>{uploading ? "Uploading…" : "Click to upload images for this gallery"}</div>
+              </label>
+              {error && <div className="warn-banner">{error}</div>}
+            </div>
+          )}
+
+          {chFiles.length === 0 ? (
+            <div style={{ textAlign: "center", padding: "48px 0", color: "#aaa", fontStyle: "italic" }}>No images in this gallery yet.</div>
+          ) : (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(180px,1fr))", gap: 8 }}>
+              {chFiles.map(img => (
+                <div key={img.id} style={{ position: "relative", aspectRatio: "1", overflow: "hidden", border: "1px solid #ddd", background: "#f5f5f5" }}>
+                  <img src={img.file_url} alt={img.file_name || "image"} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                  {editMode && canEdit && (
+                    <button onClick={() => deleteImg(img.id)}
+                      style={{ position: "absolute", top: 4, right: 4, background: "rgba(10,10,10,0.8)", color: "#fff", border: "none", cursor: "pointer", padding: "2px 6px", fontSize: 11, opacity: 0, transition: "opacity 0.15s" }}
+                      onMouseEnter={e => e.currentTarget.style.opacity = 1}
+                      onMouseLeave={e => e.currentTarget.style.opacity = 0}>
+                      ✕
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          <ChapterNav idx={activeIdx} total={chapters.length} onPrev={() => setActiveIdx(i => Math.max(0,i-1))} onNext={() => setActiveIdx(i => Math.min(chapters.length-1,i+1))} />
+        </div>
       </div>
+    </div>
+  );
+}
+
+// ─── SHARED SUBCOMPONENTS ─────────────────────────────────────────────────────
+function ChapterNav({ idx, total, onPrev, onNext }) {
+  if (total <= 1) return null;
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 16, padding: "10px 0" }}>
+      <button className="btn btn-sm" onClick={onPrev} disabled={idx === 0}>← Previous</button>
+      <span style={{ fontSize: 12, color: "#aaa", fontFamily: "monospace" }}>{idx + 1} / {total}</span>
+      <button className="btn btn-primary btn-sm" onClick={onNext} disabled={idx === total - 1}>Next →</button>
+    </div>
+  );
+}
+
+function Spinner() {
+  return (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: 60, gap: 10, color: "#aaa", fontSize: 13 }}>
+      <span style={{ display: "inline-block", width: 14, height: 14, border: "2px solid #aaa", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.7s linear infinite" }} />
+      Loading…
     </div>
   );
 }

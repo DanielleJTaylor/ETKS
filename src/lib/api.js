@@ -150,10 +150,20 @@ export const WorkFiles = {
       return {data:await r.json(),error:null};
     } catch(e){return {data:[],error:e.message};}
   },
-  add: async (token,workId,userId,fileType,fileUrl,fileName,sortOrder=0) => {
-    const r=await apiFetch(`${SUPABASE_URL}/rest/v1/work_files`,{method:"POST",headers:dbH(token),body:JSON.stringify({work_id:workId,user_id:userId,file_type:fileType,file_url:fileUrl,file_name:fileName,sort_order:sortOrder})});
+  add: async (token,workId,userId,fileType,fileUrl,fileName,sortOrder=0,chapterId=null) => {
+    const body={work_id:workId,user_id:userId,file_type:fileType,file_url:fileUrl,file_name:fileName,sort_order:sortOrder};
+    if(chapterId) body.chapter_id=chapterId;
+    const r=await apiFetch(`${SUPABASE_URL}/rest/v1/work_files`,{method:"POST",headers:dbH(token),body:JSON.stringify(body)});
     if (!r.ok) return {data:null,error:"Failed to save file."};
     return {data:(await r.json())[0],error:null};
+  },
+  fetchByChapter: async (workId, chapterId) => {
+    try {
+      const filter = chapterId ? `&chapter_id=eq.${encodeURIComponent(chapterId)}` : "";
+      const r=await apiFetch(`${SUPABASE_URL}/rest/v1/work_files?work_id=eq.${workId}${filter}&order=sort_order.asc&select=*`,{headers:anonDbH()});
+      if (!r.ok) return {data:[],error:"Failed to load files."};
+      return {data:await r.json(),error:null};
+    } catch(e){return {data:[],error:e.message};}
   },
   delete: async (token,fileId) => {
     const r=await apiFetch(`${SUPABASE_URL}/rest/v1/work_files?id=eq.${fileId}`,{method:"DELETE",headers:{...dbH(token),"Prefer":"return=minimal"}});

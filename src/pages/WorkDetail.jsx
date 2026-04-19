@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useParams, useNavigate, Link } from "react-router-dom";
+import { useParams, useNavigate, useLocation, Link } from "react-router-dom";
 import { useAuth } from "../lib/AuthContext";
 import { Works, Reactions, Profiles } from "../lib/api";
 import ProseEditor, { ProseViewer } from "../components/editors/ProseEditor";
@@ -7,18 +7,22 @@ import { ComicSection, PDFSection, ImageGallery } from "../components/editors/Fo
 import CommentsSection from "../components/CommentsSection";
 
 export default function WorkDetail() {
-  const { id }    = useParams();
-  const { session } = useAuth();
-  const navigate  = useNavigate();
+  const { id }       = useParams();
+  const { session }  = useAuth();
+  const navigate     = useNavigate();
+  const location     = useLocation();
 
-  const [work, setWork]           = useState(null);
-  const [loading, setLoading]     = useState(true);
-  const [myReact, setMyReact]     = useState(null);
-  const [counts, setCounts]       = useState({ likes: 0, dislikes: 0 });
-  const [error, setError]         = useState("");
+  // canEdit is ONLY true when navigating from My Works (Dashboard)
+  const canEdit = !!(session && location.state?.canEdit);
+
+  const [work, setWork]             = useState(null);
+  const [loading, setLoading]       = useState(true);
+  const [myReact, setMyReact]       = useState(null);
+  const [counts, setCounts]         = useState({ likes: 0, dislikes: 0 });
+  const [error, setError]           = useState("");
   const [authorName, setAuthorName] = useState(null);
-  const [editMode, setEditMode]   = useState(false);
-  const [workKey, setWorkKey]     = useState(0); // force re-render after edit
+  const [editMode, setEditMode]     = useState(false);
+  const [workKey, setWorkKey]       = useState(0);
 
   useEffect(() => {
     Works.fetchOne(id, session?.access_token).then(({ data, error: err }) => {
@@ -51,49 +55,58 @@ export default function WorkDetail() {
     await Reactions.react(session.access_token, session.user.id, work.id, next);
   };
 
+  const exitEdit = async () => {
+    const { data } = await Works.fetchOne(id, session?.access_token);
+    if (data) setWork(data);
+    setWorkKey(k => k + 1);
+    setEditMode(false);
+  };
+
   if (loading) return (
     <div className="page-loading">
-      <span className="spinner" style={{ borderColor:"var(--gray-400)", borderTopColor:"transparent" }}/>
+      <span className="spinner" style={{ borderColor: "var(--gray-400)", borderTopColor: "transparent" }} />
       Loading work…
     </div>
   );
 
   if (error || !work) return (
-    <div style={{ textAlign:"center", padding:"80px 24px" }}>
-      <p style={{ color:"var(--gray-600)", marginBottom:16 }}>{error || "Work not found."}</p>
+    <div style={{ textAlign: "center", padding: "80px 24px" }}>
+      <p style={{ color: "var(--gray-600)", marginBottom: 16 }}>{error || "Work not found."}</p>
       <button className="btn" onClick={() => navigate(-1)}>← Go Back</button>
     </div>
   );
 
   const isOwner  = session?.user?.id === work.user_id;
   const isPublic = work.visibility === "public";
-  const isTextFormat = work.format === "novel";
 
   if (!isPublic && !isOwner) return (
-    <div style={{ textAlign:"center", padding:"80px 24px" }}>
-      <p style={{ color:"var(--gray-600)", marginBottom:16 }}>This work is private.</p>
+    <div style={{ textAlign: "center", padding: "80px 24px" }}>
+      <p style={{ color: "var(--gray-600)", marginBottom: 16 }}>This work is private.</p>
       <button className="btn" onClick={() => navigate(-1)}>← Go Back</button>
     </div>
   );
 
-  // Full-screen edit mode for text formats (owner only)
-  if (editMode && isOwner && isTextFormat) {
+  // Novel full-screen edit mode — only if canEdit (came from My Works)
+  if (editMode && canEdit && work.format === "novel") {
     return (
       <ProseEditor
         work={work}
         isOwner={true}
         session={session}
         authorName={authorName}
-        onExitEdit={async () => {
-          // Re-fetch latest content so viewer shows saved changes immediately
-          const { data } = await Works.fetchOne(id, session?.access_token);
-          if (data) setWork(data);
-          setWorkKey(k => k + 1);
-          setEditMode(false);
-        }}
+        onExitEdit={exitEdit}
       />
     );
   }
+
+  const parseChapters = () => {
+    try {
+      const p = JSON.parse(work.content || "{}");
+      if (p.chapters) return p.chapters;
+    } catch {}
+    if (work.content) return [{ id: "ch1", title: "Chapter 1", content: work.content }];
+    return [{ id: "ch1", title: "Chapter 1", content: "" }];
+  };
 
   return (
     <div className="work-detail-wrap">
@@ -106,28 +119,21 @@ export default function WorkDetail() {
           <span className={`vis-badge ${work.visibility}`}>
             {work.visibility === "private" ? "🔒 Private" : "🌐 Public"}
           </span>
-          <span style={{ fontSize:12, color:"var(--gray-400)", fontFamily:"var(--font-mono)" }}>
+          <span style={{ fontSize: 12, color: "var(--gray-400)", fontFamily: "var(--font-mono)" }}>
             {authorName ? `by ${authorName} · ` : ""}
-            {new Date(work.created_at).toLocaleDateString("en-US",{ month:"long", day:"numeric", year:"numeric" })}
+            {new Date(work.created_at).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
           </span>
-          {isOwner && (
-            <div style={{ marginLeft:"auto", display:"flex", gap:8 }}>
-              {/* Edit Mode — only for text formats */}
-              {isTextFormat && (
-                <button className="btn btn-primary btn-sm" onClick={() => setEditMode(true)}>
-                  ✏️ Edit Mode
-                </button>
+          {/* Edit controls — only shown when canEdit (came from My Works) */}
+          {canEdit && (
+            <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+              {work.format === "novel" && (
+                <button className="btn btn-primary btn-sm" onClick={() => setEditMode(true)}>✏️ Edit Mode</button>
               )}
-              {/* Edit metadata for all formats */}
-              <Link to={`/works/${work.id}/edit`} className="btn btn-sm">
-                ⚙ Settings
-              </Link>
+              <Link to={`/works/${work.id}/edit`} className="btn btn-sm">⚙ Settings</Link>
             </div>
           )}
         </div>
-        {work.description && (
-          <div className="work-detail-desc">{work.description}</div>
-        )}
+        {work.description && <div className="work-detail-desc">{work.description}</div>}
         {(work.tags || []).length > 0 && (
           <div className="work-detail-tags">
             {(work.tags || []).map(t => <span className="tag-chip" key={t}>{t}</span>)}
@@ -138,47 +144,38 @@ export default function WorkDetail() {
       {/* Reactions */}
       {(isPublic || isOwner) && (
         <div className="work-detail-reactions">
-          <button className={`reaction-btn ${myReact==="like"?"active-like":""}`}
-            onClick={() => handleReact("like")} disabled={!session||isOwner}
-            title={isOwner?"Can't react to own work":session?"Like":"Sign in"}>
-            👍 {counts.likes} {counts.likes===1?"like":"likes"}
+          <button className={`reaction-btn ${myReact === "like" ? "active-like" : ""}`}
+            onClick={() => handleReact("like")} disabled={!session || isOwner}
+            title={isOwner ? "Can't react to own work" : session ? "Like" : "Sign in"}>
+            👍 {counts.likes} {counts.likes === 1 ? "like" : "likes"}
           </button>
-          <button className={`reaction-btn ${myReact==="dislike"?"active-dislike":""}`}
-            onClick={() => handleReact("dislike")} disabled={!session||isOwner}
-            title={isOwner?"Can't react to own work":session?"Dislike":"Sign in"}>
-            👎 {counts.dislikes} {counts.dislikes===1?"dislike":"dislikes"}
+          <button className={`reaction-btn ${myReact === "dislike" ? "active-dislike" : ""}`}
+            onClick={() => handleReact("dislike")} disabled={!session || isOwner}
+            title={isOwner ? "Can't react to own work" : session ? "Dislike" : "Sign in"}>
+            👎 {counts.dislikes} {counts.dislikes === 1 ? "dislike" : "dislikes"}
           </button>
-          {!session && <span style={{ fontSize:12, color:"var(--gray-400)", marginLeft:4 }}>Sign in to react.</span>}
+          {!session && <span style={{ fontSize: 12, color: "var(--gray-400)", marginLeft: 4 }}>Sign in to react.</span>}
         </div>
       )}
 
-      {/* Content */}
+      {/* Content — viewer always; edit mode buttons only when canEdit */}
       <div>
-        {/* Prose & Visual Novel — always show viewer here; editor is full-screen above */}
-        {isTextFormat && (
+        {work.format === "novel" && (
           <ProseViewer
             key={workKey}
-            chapters={(() => {
-              try {
-                const p = JSON.parse(work.content || "{}");
-                if (p.chapters) return p.chapters;
-              } catch {}
-              if (work.content) return [{ id:"ch1", title:"Chapter 1", content: work.content }];
-              return [{ id:"ch1", title:"Chapter 1", content:"" }];
-            })()}
+            chapters={parseChapters()}
             workTitle={work.title}
             authorName={authorName}
           />
         )}
-
         {work.format === "comic" && (
-          <ComicSection work={work} isOwner={isOwner} session={session} />
+          <ComicSection key={workKey} work={work} canEdit={canEdit} session={session} />
         )}
         {work.format === "pdf" && (
-          <PDFSection work={work} isOwner={isOwner} session={session} />
+          <PDFSection key={workKey} work={work} canEdit={canEdit} session={session} />
         )}
         {work.format === "other" && (
-          <ImageGallery work={work} isOwner={isOwner} session={session} />
+          <ImageGallery key={workKey} work={work} canEdit={canEdit} session={session} />
         )}
       </div>
 
