@@ -9,20 +9,33 @@ import WorkDetail from "./pages/WorkDetail";
 import CreateWork from "./pages/CreateWork";
 import EditWork from "./pages/EditWork";
 import Profile from "./pages/Profile";
+import Login from "./pages/Login";
+import Signup from "./pages/Signup";
+import ForgotPassword from "./pages/ForgotPassword";
+import UpdatePassword from "./pages/UpdatePassword";
+
+// Pages that have their own full-screen layout (no Nav)
+const AUTH_PATHS = ["/login", "/signup", "/forgot-password", "/update-password"];
 
 export default function App() {
+  const isAuthPage = AUTH_PATHS.some(p => window.location.pathname.startsWith(p));
+
   return (
     <AuthProvider>
       <GlobalStyles />
-      <Nav />
+      {!isAuthPage && <Nav />}
       <Routes>
-        <Route path="/"               element={<Landing />} />
-        <Route path="/browse"         element={<Browse />} />
-        <Route path="/dashboard"      element={<Dashboard />} />
-        <Route path="/works/:id"      element={<WorkDetail />} />
-        <Route path="/works/:id/edit" element={<EditWork />} />
-        <Route path="/create"         element={<CreateWork />} />
-        <Route path="/u/:username"     element={<Profile />} />
+        <Route path="/"                   element={<Landing />} />
+        <Route path="/browse"             element={<Browse />} />
+        <Route path="/dashboard"          element={<Dashboard />} />
+        <Route path="/works/:id"          element={<WorkDetail />} />
+        <Route path="/works/:id/edit"     element={<EditWork />} />
+        <Route path="/create"             element={<CreateWork />} />
+        <Route path="/u/:username"        element={<Profile />} />
+        <Route path="/login"              element={<Login />} />
+        <Route path="/signup"             element={<Signup />} />
+        <Route path="/forgot-password"    element={<ForgotPassword />} />
+        <Route path="/update-password"    element={<UpdatePassword />} />
         <Route path="*" element={
           <div style={{ textAlign: "center", padding: "80px 24px" }}>
             <div style={{ fontFamily: "var(--font-serif)", fontSize: 32, fontWeight: 700, marginBottom: 12 }}>404</div>
