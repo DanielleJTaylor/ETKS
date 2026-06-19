@@ -102,7 +102,7 @@ export default function Browse() {
   return (
     <div className="browse-wrap">
       <div style={{ padding: "32px 0 24px", borderBottom: "var(--border)", marginBottom: 28 }}>
-        <div style={{ fontFamily: "var(--font-serif)", fontSize: 30, fontWeight: 700 }}>Browse Works</div>
+        <div style={{ fontFamily: "var(--font-serif)", fontSize: 38, letterSpacing: "0.5px" }}>Browse Works</div>
         <div style={{ fontSize: 13, color: "var(--gray-400)", marginTop: 4 }}>All public works in the archive. Filter by tags or sort to find what you want.</div>
       </div>
 
@@ -134,8 +134,8 @@ export default function Browse() {
 
           {results.length === 0 && (
             <div style={{ textAlign: "center", padding: "48px 0" }}>
-              <div style={{ fontSize: 28, marginBottom: 12 }}>🔍</div>
-              <div style={{ fontFamily: "var(--font-serif)", fontSize: 18, fontWeight: 700, marginBottom: 6 }}>No results</div>
+              <div style={{ fontFamily: "var(--font-serif)", fontSize: 30, color: "var(--red)", marginBottom: 12 }}>?</div>
+              <div style={{ fontFamily: "var(--font-serif)", fontSize: 22, letterSpacing: "0.3px", marginBottom: 6 }}>No results</div>
               <div style={{ fontSize: 13, color: "var(--gray-400)" }}>No public works yet, or no matches for your filters.</div>
             </div>
           )}

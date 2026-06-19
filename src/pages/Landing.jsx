@@ -1,23 +1,20 @@
 import { Link } from "react-router-dom";
 import { useAuth } from "../lib/AuthContext";
-import { useState } from "react";
-import AuthModals from "../components/AuthModals";
 
 const FEATURES = [
-  { icon: "📖", title: "Every Format",       desc: "Prose with chapters, comics, visual novels, PDFs, and image galleries." },
-  { icon: "🏷️", title: "Tag-Based Search",   desc: "AND, OR, EXCLUDE logic. Find exactly what you want, nothing else." },
-  { icon: "🔒", title: "Private by Default", desc: "Works start private. You decide when anything goes public." },
-  { icon: "🆓", title: "Free to Use",        desc: "No paywalls, no algorithmic feeds. Just an open archive you control." },
+  { icon: "★", title: "Every Format",       desc: "Prose with chapters, comics, visual novels, PDFs, and image galleries." },
+  { icon: "#", title: "Tag-Based Search",   desc: "AND, OR, EXCLUDE logic. Find exactly what you want, nothing else." },
+  { icon: "!", title: "Private by Default", desc: "Works start private. You decide when anything goes public." },
+  { icon: "$", title: "Free to Use",        desc: "No paywalls, no algorithmic feeds. Just an open archive you control." },
 ];
 
 export default function Landing() {
   const { session } = useAuth();
-  const [modal, setModal] = useState(null);
 
   return (
     <div>
       <div className="landing-hero">
-        <div className="hero-eyebrow">Open Creative Archive · Est. 2025</div>
+        <div className="hero-eyebrow">★ Open Creative Archive · Est. 2025 ★</div>
         <h1 className="hero-title">Everything &amp; The<br /><em>Kitchen Sink</em></h1>
         <p className="hero-sub">
           A home for every format of creative work. Publish anything, tag precisely,
@@ -29,8 +26,8 @@ export default function Landing() {
             <Link to="/dashboard" className="btn" style={{ padding: "13px 28px", fontSize: 14 }}>My Works</Link>
           ) : (
             <>
-              <button className="btn" style={{ padding: "13px 28px", fontSize: 14 }} onClick={() => setModal("signin")}>Sign In</button>
-              <button className="btn btn-red" style={{ padding: "13px 28px", fontSize: 14 }} onClick={() => setModal("signup")}>Join Free</button>
+              <Link to="/login" className="btn" style={{ padding: "13px 28px", fontSize: 14 }}>Sign In</Link>
+              <Link to="/signup" className="btn btn-red" style={{ padding: "13px 28px", fontSize: 14 }}>Join Free</Link>
             </>
           )}
         </div>
@@ -46,12 +43,11 @@ export default function Landing() {
         ))}
       </div>
       {!session && (
-        <div style={{ borderTop: "var(--border)", padding: "32px", textAlign: "center" }}>
-          <p style={{ fontSize: 13, color: "var(--gray-400)", marginBottom: 16 }}>Ready to publish?</p>
-          <button className="btn btn-red" onClick={() => setModal("signup")}>Create a Free Account</button>
+        <div style={{ borderTop: "var(--border)", padding: "36px 32px", textAlign: "center" }}>
+          <p style={{ fontSize: 13, color: "var(--gray-600)", marginBottom: 16, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em" }}>Ready to publish?</p>
+          <Link to="/signup" className="btn btn-red" style={{ padding: "13px 28px", fontSize: 14 }}>Create a Free Account</Link>
         </div>
       )}
-      {modal && <AuthModals initial={modal} onClose={() => setModal(null)} />}
     </div>
   );
 }
