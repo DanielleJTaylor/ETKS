@@ -13,9 +13,6 @@ export default function WorkDetail() {
   const navigate     = useNavigate();
   const location     = useLocation();
 
-  // canEdit is ONLY true when navigating from My Works (Dashboard)
-  const canEdit = !!(session && location.state?.canEdit);
-
   const [work, setWork]             = useState(null);
   const [loading, setLoading]       = useState(true);
   const [myReact, setMyReact]       = useState(null);
@@ -24,6 +21,10 @@ export default function WorkDetail() {
   const [authorName, setAuthorName] = useState(null);
   const [editMode, setEditMode]     = useState(false);
   const [workKey, setWorkKey]       = useState(0);
+
+  // canEdit is true whenever the signed-in user owns this work — regardless
+  // of which page they navigated from (Browse, Dashboard, a direct link, etc.)
+  const canEdit = !!(session && work && session.user?.id === work.user_id);
 
   useEffect(() => {
     Works.fetchOne(id, session?.access_token).then(({ data, error: err }) => {

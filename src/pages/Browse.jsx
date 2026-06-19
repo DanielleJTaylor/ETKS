@@ -103,6 +103,32 @@ function FilterRow({ op, description, tags, onAdd, onRemove }) {
   );
 }
 
+function getFormatPreview(w) {
+  if (!w.content) return null;
+  try {
+    const parsed = JSON.parse(w.content);
+    if (w.format === "recipe" && parsed.recipe) {
+      const r = parsed.recipe;
+      const ingCount = (r.ingredients || []).length;
+      const stepCount = (r.steps || []).length;
+      const bits = [];
+      if (ingCount) bits.push(`${ingCount} ingredient${ingCount !== 1 ? "s" : ""}`);
+      if (stepCount) bits.push(`${stepCount} step${stepCount !== 1 ? "s" : ""}`);
+      if (r.baseServings) bits.push(`serves ${r.baseServings}`);
+      return { text: bits.join(" · ") || null, image: r.heroImage || null };
+    }
+    if (w.format === "prose" && parsed.chapters) {
+      const chCount = parsed.chapters.length;
+      const firstText = (parsed.chapters[0]?.content || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+      const snippet = firstText.length > 110 ? firstText.slice(0, 110) + "…" : firstText;
+      const bits = [];
+      if (chCount) bits.push(`${chCount} chapter${chCount !== 1 ? "s" : ""}`);
+      return { text: [bits.join(""), snippet].filter(Boolean).join(snippet ? " — " : ""), image: null };
+    }
+  } catch {}
+  return null;
+}
+
 export default function Browse() {
   const { session } = useAuth();
   const navigate = useNavigate();
@@ -262,16 +288,27 @@ export default function Browse() {
 
           {results.map(w => {
             const counts = reactCounts[w.id] || { likes: 0, dislikes: 0 }; const myR = myReacts[w.id];
+            const preview = getFormatPreview(w);
             return (
-              <div className="browse-card" key={w.id} onClick={() => navigate(`/works/${w.id}`)}>
-                <div className="browse-card-top"><div className="browse-card-title">{w.title}</div><span className="format-badge">{w.format}</span></div>
-                {w.description && <div className="browse-card-desc">{w.description}</div>}
-                <div className="browse-card-bottom">
-                  <div className="browse-tags">{(w.tags || []).map(t => <span className="tag-chip" key={t}>{t}</span>)}</div>
-                  <div className="browse-reactions">
-                    <button className={`reaction-btn ${myR === "like" ? "active-like" : ""}`} onClick={e => handleReact(e, w.id, "like")} disabled={!session} title={session ? "Like" : "Sign in"}>👍 {counts.likes}</button>
-                    <button className={`reaction-btn ${myR === "dislike" ? "active-dislike" : ""}`} onClick={e => handleReact(e, w.id, "dislike")} disabled={!session} title={session ? "Dislike" : "Sign in"}>👎 {counts.dislikes}</button>
-                    <span style={{ fontSize: 11, color: "var(--gray-400)", fontFamily: "var(--font-mono)", padding: "5px 8px" }}>💬 {commentCounts[w.id] || 0}</span>
+              <div className="browse-card" key={w.id} onClick={() => navigate(`/works/${w.id}`)} style={{ display: "flex", gap: preview?.image ? 16 : 0 }}>
+                {preview?.image && (
+                  <img src={preview.image} alt="" style={{ width: 90, height: 90, objectFit: "cover", borderRadius: 8, border: "1.5px solid var(--gray-200)", flexShrink: 0 }} />
+                )}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div className="browse-card-top"><div className="browse-card-title">{w.title}</div><span className="format-badge">{w.format}</span></div>
+                  {w.description && <div className="browse-card-desc">{w.description}</div>}
+                  {preview?.text && (
+                    <div style={{ fontSize: 11.5, color: "var(--gray-400)", fontWeight: 600, marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.03em" }}>
+                      {preview.text}
+                    </div>
+                  )}
+                  <div className="browse-card-bottom">
+                    <div className="browse-tags">{(w.tags || []).map(t => <span className="tag-chip" key={t}>{t}</span>)}</div>
+                    <div className="browse-reactions">
+                      <button className={`reaction-btn ${myR === "like" ? "active-like" : ""}`} onClick={e => handleReact(e, w.id, "like")} disabled={!session} title={session ? "Like" : "Sign in"}>👍 {counts.likes}</button>
+                      <button className={`reaction-btn ${myR === "dislike" ? "active-dislike" : ""}`} onClick={e => handleReact(e, w.id, "dislike")} disabled={!session} title={session ? "Dislike" : "Sign in"}>👎 {counts.dislikes}</button>
+                      <span style={{ fontSize: 11, color: "var(--gray-400)", fontFamily: "var(--font-mono)", padding: "5px 8px" }}>💬 {commentCounts[w.id] || 0}</span>
+                    </div>
                   </div>
                 </div>
               </div>
