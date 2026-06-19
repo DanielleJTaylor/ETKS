@@ -1,4 +1,5 @@
 import { Routes, Route } from "react-router-dom";
+import { useEffect } from "react";
 import { AuthProvider } from "./lib/AuthContext";
 import GlobalStyles from "./components/GlobalStyles";
 import Nav from "./components/Nav";
@@ -19,6 +20,16 @@ const AUTH_PATHS = ["/login", "/signup", "/forgot-password", "/update-password"]
 
 export default function App() {
   const isAuthPage = AUTH_PATHS.some(p => window.location.pathname.startsWith(p));
+
+  // Safety net: if Supabase ever sends a recovery token to a path other than
+  // /update-password (e.g. it falls back to the bare Site URL), catch it here
+  // and redirect client-side so the link still works.
+  useEffect(() => {
+    const hash = window.location.hash;
+    if (hash.includes("type=recovery") && window.location.pathname !== "/update-password") {
+      window.location.replace(`/update-password${hash}`);
+    }
+  }, []);
 
   return (
     <AuthProvider>
