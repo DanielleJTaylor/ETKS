@@ -4,6 +4,7 @@ import { useAuth } from "../lib/AuthContext";
 import { Works, Reactions, Profiles } from "../lib/api";
 import ProseEditor, { ProseViewer } from "../components/editors/ProseEditor";
 import { ComicSection, PDFSection, ImageGallery } from "../components/editors/FormatEditors";
+import { RecipeSection } from "../components/editors/RecipeEditor";
 import CommentsSection from "../components/CommentsSection";
 
 export default function WorkDetail() {
@@ -86,8 +87,8 @@ export default function WorkDetail() {
     </div>
   );
 
-  // Novel full-screen edit mode — only if canEdit (came from My Works)
-  if (editMode && canEdit && work.format === "novel") {
+  // Prose full-screen edit mode — only if canEdit (came from My Works)
+  if (editMode && canEdit && work.format === "prose") {
     return (
       <ProseEditor
         work={work}
@@ -126,7 +127,7 @@ export default function WorkDetail() {
           {/* Edit controls — only shown when canEdit (came from My Works) */}
           {canEdit && (
             <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
-              {work.format === "novel" && (
+              {work.format === "prose" && (
                 <button className="btn btn-primary btn-sm" onClick={() => setEditMode(true)}>✏️ Edit Mode</button>
               )}
               <Link to={`/works/${work.id}/edit`} className="btn btn-sm">⚙ Settings</Link>
@@ -160,7 +161,7 @@ export default function WorkDetail() {
 
       {/* Content — viewer always; edit mode buttons only when canEdit */}
       <div>
-        {work.format === "novel" && (
+        {work.format === "prose" && (
           <ProseViewer
             key={workKey}
             chapters={parseChapters()}
@@ -171,8 +172,14 @@ export default function WorkDetail() {
         {work.format === "comic" && (
           <ComicSection key={workKey} work={work} canEdit={canEdit} session={session} />
         )}
+        {work.format === "visual-novel" && (
+          <ComicSection key={workKey} work={work} canEdit={canEdit} session={session} />
+        )}
         {work.format === "pdf" && (
           <PDFSection key={workKey} work={work} canEdit={canEdit} session={session} />
+        )}
+        {work.format === "recipe" && (
+          <RecipeSection key={workKey} work={work} canEdit={canEdit} session={session} />
         )}
         {work.format === "other" && (
           <ImageGallery key={workKey} work={work} canEdit={canEdit} session={session} />

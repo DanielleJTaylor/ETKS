@@ -70,7 +70,7 @@ export default function Landing() {
           </span>
         </div>
 
-        <div style={speechStyle}>★ Every story format welcome ★</div>
+        <div style={speechStyle}>★ Every format welcome ★</div>
 
         <h1 style={titleStyle}>
           EVERYTHING<br />
