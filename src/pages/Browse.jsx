@@ -12,6 +12,15 @@ const SORT_OPTIONS = [
   { id: "comments", label: "Most Comments" },
 ];
 
+const FORMAT_OPTIONS = [
+  { id: "prose",        label: "Novel / Prose" },
+  { id: "comic",        label: "Comic"         },
+  { id: "visual-novel", label: "Visual Novel"  },
+  { id: "pdf",          label: "PDF"           },
+  { id: "recipe",       label: "Recipe"        },
+  { id: "other",        label: "Gallery / Other" },
+];
+
 function applySort(data, sort, cc = {}) {
   const d = [...data];
   if (sort === "recent")   return d.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
@@ -20,6 +29,46 @@ function applySort(data, sort, cc = {}) {
   if (sort === "disliked") return d.sort((a, b) => (b.dislike_count || 0) - (a.dislike_count || 0));
   if (sort === "comments") return d.sort((a, b) => (cc[b.id] || 0) - (cc[a.id] || 0));
   return d;
+}
+
+// Fuzzy match: checks if query words appear (in any order) across title, description, and tags
+// Also handles common shorthand aliases — "mac" matches "macaroni", "dnd" matches "d&d", etc.
+const ALIASES = {
+  "mac": ["macaroni", "mac and cheese", "mac & cheese"],
+  "dnd": ["d&d", "dungeons and dragons", "dungeons & dragons", "5e", "pathfinder"],
+  "d&d": ["dungeons and dragons", "dnd", "5e"],
+  "scifi": ["sci-fi", "science fiction"],
+  "sci fi": ["sci-fi", "science fiction"],
+  "vn": ["visual novel"],
+  "fic": ["fanfiction", "fiction"],
+};
+
+function fuzzyMatch(work, query) {
+  if (!query.trim()) return true;
+  const q = query.toLowerCase().trim();
+  const haystack = [
+    work.title || "",
+    work.description || "",
+    ...(work.tags || []),
+    work.format || "",
+  ].join(" ").toLowerCase();
+
+  // Check aliases — expand query with related terms
+  const expanded = [q, ...(ALIASES[q] || [])];
+  for (const term of expanded) {
+    if (haystack.includes(term)) return true;
+  }
+
+  // Multi-word: every word must appear somewhere
+  const words = q.split(/\s+/).filter(Boolean);
+  if (words.length > 1) {
+    return words.every(w => {
+      const wordAliases = [w, ...(ALIASES[w] || [])];
+      return wordAliases.some(a => haystack.includes(a));
+    });
+  }
+
+  return false;
 }
 
 function FilterRow({ op, description, tags, onAdd, onRemove }) {
@@ -62,9 +111,15 @@ export default function Browse() {
   const [loading, setLoading] = useState(false); const [searched, setSearched] = useState(false);
   const [error, setError] = useState(""); const [myReacts, setMyReacts] = useState({}); const [reactCounts, setRC] = useState({});
   const [commentCounts, setCC] = useState({});
+  const [selectedFormats, setFormats] = useState([]); // [] means "all formats"
+  const [generalQuery, setGeneralQuery] = useState("");
 
   const addTo = (s) => (t) => s(p => p.includes(t) ? p : [...p, t]);
   const rmFrom = (s) => (t) => s(p => p.filter(x => x !== t));
+
+  const toggleFormat = (id) => {
+    setFormats(prev => prev.includes(id) ? prev.filter(f => f !== id) : [...prev, id]);
+  };
 
   const runSearch = useCallback(async (a, o, e) => {
     setLoading(true); setError("");
@@ -87,7 +142,7 @@ export default function Browse() {
   useEffect(() => { runSearch([], [], []); }, [runSearch]);
 
   const doSearch = () => runSearch(andTags, orTags, excludeTags);
-  const clearAll = () => { setAnd([]); setOr([]); setEx([]); runSearch([], [], []); };
+  const clearAll = () => { setAnd([]); setOr([]); setEx([]); setFormats([]); setGeneralQuery(""); runSearch([], [], []); };
 
   const handleReact = async (e, workId, reaction) => {
     e.stopPropagation(); if (!session) return;
@@ -97,17 +152,82 @@ export default function Browse() {
     await Reactions.react(session.access_token, session.user.id, workId, next);
   };
 
-  const results = applySort(allResults, sort, commentCounts);
+  // Apply format filter and general query client-side
+  const sorted = applySort(allResults, sort, commentCounts);
+  const results = sorted
+    .filter(w => selectedFormats.length === 0 || selectedFormats.includes(w.format))
+    .filter(w => fuzzyMatch(w, generalQuery));
 
   return (
     <div className="browse-wrap">
       <div style={{ padding: "32px 0 24px", borderBottom: "var(--border)", marginBottom: 28 }}>
         <div style={{ fontFamily: "var(--font-serif)", fontSize: 38, letterSpacing: "0.5px" }}>Browse Works</div>
-        <div style={{ fontSize: 13, color: "var(--gray-400)", marginTop: 4 }}>All public works in the archive. Filter by tags or sort to find what you want.</div>
+        <div style={{ fontSize: 13, color: "var(--gray-400)", marginTop: 4 }}>All public works in the archive. Filter by tags, format, or search to find what you want.</div>
       </div>
 
+      {/* General search */}
+      <div style={{ marginBottom: 16 }}>
+        <div style={{ position: "relative" }}>
+          <input
+            className="input"
+            type="text"
+            placeholder='General search — try "macaroni and cheese" or "dnd adventure"…'
+            value={generalQuery}
+            onChange={e => setGeneralQuery(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && doSearch()}
+            style={{ paddingRight: 40, borderRadius: 8, borderWidth: 2 }}
+          />
+          {generalQuery && (
+            <button
+              onClick={() => setGeneralQuery("")}
+              style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", fontSize: 16, color: "var(--gray-400)", lineHeight: 1 }}
+            >×</button>
+          )}
+        </div>
+      </div>
+
+      {/* Format multi-select */}
+      <div style={{ marginBottom: 20 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--gray-600)", marginBottom: 8 }}>Format</div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+          {FORMAT_OPTIONS.map(f => (
+            <button
+              key={f.id}
+              onClick={() => toggleFormat(f.id)}
+              style={{
+                fontFamily: "var(--font-sans)",
+                fontSize: 12,
+                fontWeight: 700,
+                textTransform: "uppercase",
+                letterSpacing: "0.03em",
+                padding: "7px 16px",
+                border: "2px solid #111",
+                borderRadius: 20,
+                cursor: "pointer",
+                transition: "all 0.1s",
+                background: selectedFormats.includes(f.id) ? "#111" : "#fff",
+                color: selectedFormats.includes(f.id) ? "#fff" : "#111",
+                transform: selectedFormats.includes(f.id) ? "translate(-1px,-1px)" : "none",
+                boxShadow: selectedFormats.includes(f.id) ? "2px 2px 0 var(--red)" : "none",
+              }}
+            >
+              {f.label}
+            </button>
+          ))}
+          {selectedFormats.length > 0 && (
+            <button onClick={() => setFormats([])} style={{ fontSize: 11, fontWeight: 700, color: "var(--red)", background: "none", border: "none", cursor: "pointer", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+              Clear ×
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Tag filter */}
       <div className="search-builder">
-        <div className="search-builder-header"><span className="search-builder-title">Tag Filter</span><button className="text-link" style={{ fontSize: 11 }} onClick={clearAll}>Clear all</button></div>
+        <div className="search-builder-header">
+          <span className="search-builder-title">★ Tag Filter ★</span>
+          <button className="text-link" style={{ fontSize: 11 }} onClick={clearAll}>Clear all</button>
+        </div>
         <FilterRow op="and" description="Results must include all of these tags" tags={andTags} onAdd={addTo(setAnd)} onRemove={rmFrom(setAnd)} />
         <FilterRow op="or"  description="Results match any one of these tags"   tags={orTags}  onAdd={addTo(setOr)}  onRemove={rmFrom(setOr)} />
         <FilterRow op="exclude" description="Results must not include these tags" tags={excludeTags} onAdd={addTo(setEx)} onRemove={rmFrom(setEx)} />
