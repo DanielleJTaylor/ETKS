@@ -101,10 +101,10 @@ export default function Landing() {
       {/* Feature panels */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", borderTop: "var(--border)", flexGrow: 1 }}>
         {FEATURES.map((f, i) => (
-          <div key={f.title} style={{ borderRight: i < 3 ? "2px solid #111" : "none", padding: "40px 24px", textAlign: "center", background: "#fff" }}>
-            <div style={{ fontFamily: "var(--font-serif)", fontSize: 34, color: "#ed1c24", marginBottom: 10 }}>{f.icon}</div>
-            <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 8 }}>{f.title}</div>
-            <div style={{ fontSize: 12.5, lineHeight: 1.65, color: "#555" }}>{f.desc}</div>
+          <div key={f.title} style={{ borderRight: i < 3 ? "2px solid #111" : "none", padding: "60px 32px", textAlign: "center", background: "#fff", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+            <div style={{ fontFamily: "var(--font-serif)", fontSize: 100, color: "#ed1c24", marginBottom: 20, lineHeight: 1 }}>{f.icon}</div>
+            <div style={{ fontSize: 18, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 14 }}>{f.title}</div>
+            <div style={{ fontSize: 15, lineHeight: 1.7, color: "#555", maxWidth: 220 }}>{f.desc}</div>
           </div>
         ))}
       </div>
