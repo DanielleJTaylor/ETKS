@@ -10,12 +10,12 @@ const FEATURES = [
 
 const heroStyle = {
   position: "relative",
-  padding: "60px 28px",
+  padding: "48px 28px 44px",
   textAlign: "center",
   overflow: "hidden",
   borderBottom: "var(--border)",
-  backgroundImage: "radial-gradient(#111 0.8px, transparent 0.8px)",
-  backgroundSize: "6px 6px",
+  backgroundImage: "radial-gradient(circle, #ccc 1px, transparent 1px)",
+  backgroundSize: "14px 14px",
   backgroundColor: "#fff",
 };
 
@@ -99,12 +99,12 @@ export default function Landing() {
       </div>
 
       {/* Feature panels */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 4, borderTop: "var(--border)", padding: 4, background: "#f4f4f4" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", borderTop: "var(--border)" }}>
         {FEATURES.map(f => (
-          <div key={f.title} style={{ border: "3px solid #111", padding: "24px 18px", textAlign: "center", borderRadius: 6, background: "#fff" }}>
+          <div key={f.title} style={{ borderRight: "2px solid #111", padding: "28px 22px", textAlign: "center", background: "#fff" }}>
             <div style={{ fontFamily: "var(--font-serif)", fontSize: 30, color: "#ed1c24", marginBottom: 8 }}>{f.icon}</div>
-            <div style={{ fontSize: 13, fontWeight: 700, textTransform: "uppercase", marginBottom: 6 }}>{f.title}</div>
-            <div style={{ fontSize: 11.5, lineHeight: 1.5, color: "#444" }}>{f.desc}</div>
+            <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 6 }}>{f.title}</div>
+            <div style={{ fontSize: 12, lineHeight: 1.6, color: "#555" }}>{f.desc}</div>
           </div>
         ))}
       </div>
