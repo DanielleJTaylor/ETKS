@@ -10,7 +10,7 @@ const FEATURES = [
 
 const heroStyle = {
   position: "relative",
-  padding: "48px 28px 44px",
+  padding: "36px 28px 38px",
   textAlign: "center",
   overflow: "hidden",
   borderBottom: "var(--border)",
@@ -61,7 +61,7 @@ export default function Landing() {
   const { session } = useAuth();
 
   return (
-    <div>
+    <div style={{ minHeight: "calc(100vh - 60px)", display: "flex", flexDirection: "column" }}>
       {/* Hero */}
       <div style={heroStyle}>
         <div style={burstStyle}>
@@ -99,19 +99,19 @@ export default function Landing() {
       </div>
 
       {/* Feature panels */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", borderTop: "var(--border)" }}>
-        {FEATURES.map(f => (
-          <div key={f.title} style={{ borderRight: "2px solid #111", padding: "28px 22px", textAlign: "center", background: "#fff" }}>
-            <div style={{ fontFamily: "var(--font-serif)", fontSize: 30, color: "#ed1c24", marginBottom: 8 }}>{f.icon}</div>
-            <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 6 }}>{f.title}</div>
-            <div style={{ fontSize: 12, lineHeight: 1.6, color: "#555" }}>{f.desc}</div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", borderTop: "var(--border)", flexGrow: 1 }}>
+        {FEATURES.map((f, i) => (
+          <div key={f.title} style={{ borderRight: i < 3 ? "2px solid #111" : "none", padding: "40px 24px", textAlign: "center", background: "#fff" }}>
+            <div style={{ fontFamily: "var(--font-serif)", fontSize: 34, color: "#ed1c24", marginBottom: 10 }}>{f.icon}</div>
+            <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 8 }}>{f.title}</div>
+            <div style={{ fontSize: 12.5, lineHeight: 1.65, color: "#555" }}>{f.desc}</div>
           </div>
         ))}
       </div>
 
-      {/* CTA strip */}
+      {/* CTA strip — shown to logged-out users, fills bottom of page */}
       {!session && (
-        <div style={{ textAlign: "center", padding: 36, borderTop: "var(--border)", background: "#111" }}>
+        <div style={{ textAlign: "center", padding: "40px 36px", borderTop: "var(--border)", background: "#111" }}>
           <Link
             to="/signup"
             style={{
@@ -129,6 +129,14 @@ export default function Landing() {
           >
             START YOUR FIRST WORK →
           </Link>
+        </div>
+      )}
+
+      {/* Logged-in footer — keeps page from looking cut off */}
+      {session && (
+        <div style={{ borderTop: "var(--border)", padding: "28px 32px", background: "#111", display: "flex", justifyContent: "center", gap: 16 }}>
+          <Link to="/browse" className="btn btn-red" style={{ fontSize: 13 }}>Browse Works →</Link>
+          <Link to="/create" className="btn" style={{ fontSize: 13, background: "#ffde17", borderColor: "#111" }}>+ New Work</Link>
         </div>
       )}
     </div>
