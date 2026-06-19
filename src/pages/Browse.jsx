@@ -13,7 +13,7 @@ const SORT_OPTIONS = [
 ];
 
 const FORMAT_OPTIONS = [
-  { id: "prose",        label: "Novel / Prose" },
+  { id: "prose",        label: "Prose" },
   { id: "comic",        label: "Comic"         },
   { id: "visual-novel", label: "Visual Novel"  },
   { id: "pdf",          label: "PDF"           },

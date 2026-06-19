@@ -9,7 +9,7 @@ create table if not exists public.works (
   user_id     uuid not null references auth.users(id) on delete cascade,
   title       text not null,
   description text,
-  format      text not null check (format in ('prose','comic','visual-novel','pdf','other')),
+  format      text not null check (format in ('prose','comic','visual-novel','pdf','recipe','other')),
   tags        text[] not null default '{}',
   visibility  text not null default 'private' check (visibility in ('private','public')),
   content     text,

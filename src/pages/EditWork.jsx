@@ -5,10 +5,12 @@ import { Works } from "../lib/api";
 import TagInput from "../components/TagInput";
 
 const FORMATS = [
-  { id: "novel",  name: "Novel",           desc: "Text, chapters & scenes" },
-  { id: "comic",  name: "Comic",           desc: "Vertical scroll images" },
-  { id: "pdf",    name: "PDF",             desc: "Documents & guides" },
-  { id: "other",  name: "Gallery / Other", desc: "Images & misc" },
+  { id: "prose",          name: "Prose",           desc: "Text, chapters & scenes" },
+  { id: "comic",          name: "Comic",           desc: "Vertical scroll images" },
+  { id: "visual-novel",   name: "Visual Novel",    desc: "Scenes with images & text" },
+  { id: "pdf",            name: "PDF",             desc: "Documents & guides" },
+  { id: "recipe",         name: "Recipe",          desc: "Ingredients, steps & tags" },
+  { id: "other",          name: "Gallery / Other", desc: "Images & misc" },
 ];
 
 export default function EditWork() {
