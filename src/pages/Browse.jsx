@@ -103,7 +103,17 @@ function FilterRow({ op, description, tags, onAdd, onRemove }) {
   );
 }
 
+const FORMAT_ICON = {
+  prose: "📖", comic: "🖼️", "visual-novel": "🎬", pdf: "📄", recipe: "🍳", other: "🗂️",
+};
+
 function getFormatPreview(w) {
+  // Image-bearing formats: comic/visual-novel/pdf/other use the batched _thumb;
+  // recipe uses its own hero image stored in content.
+  if (w._thumb?.file_url && w._thumb.file_type !== "pdf") {
+    return { image: w._thumb.file_url, text: null };
+  }
+
   if (!w.content) return null;
   try {
     const parsed = JSON.parse(w.content);
@@ -120,10 +130,10 @@ function getFormatPreview(w) {
     if (w.format === "prose" && parsed.chapters) {
       const chCount = parsed.chapters.length;
       const firstText = (parsed.chapters[0]?.content || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-      const snippet = firstText.length > 110 ? firstText.slice(0, 110) + "…" : firstText;
+      const snippet = firstText.length > 140 ? firstText.slice(0, 140) + "…" : firstText;
       const bits = [];
       if (chCount) bits.push(`${chCount} chapter${chCount !== 1 ? "s" : ""}`);
-      return { text: [bits.join(""), snippet].filter(Boolean).join(snippet ? " — " : ""), image: null };
+      return { text: snippet || null, meta: bits.join(""), image: null };
     }
   } catch {}
   return null;
@@ -286,34 +296,62 @@ export default function Browse() {
             </div>
           )}
 
-          {results.map(w => {
-            const counts = reactCounts[w.id] || { likes: 0, dislikes: 0 }; const myR = myReacts[w.id];
-            const preview = getFormatPreview(w);
-            return (
-              <div className="browse-card" key={w.id} onClick={() => navigate(`/works/${w.id}`)} style={{ display: "flex", gap: preview?.image ? 16 : 0 }}>
-                {preview?.image && (
-                  <img src={preview.image} alt="" style={{ width: 90, height: 90, objectFit: "cover", borderRadius: 8, border: "1.5px solid var(--gray-200)", flexShrink: 0 }} />
-                )}
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div className="browse-card-top"><div className="browse-card-title">{w.title}</div><span className="format-badge">{w.format}</span></div>
-                  {w.description && <div className="browse-card-desc">{w.description}</div>}
-                  {preview?.text && (
-                    <div style={{ fontSize: 11.5, color: "var(--gray-400)", fontWeight: 600, marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.03em" }}>
-                      {preview.text}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 18 }}>
+            {results.map(w => {
+              const counts = reactCounts[w.id] || { likes: 0, dislikes: 0 }; const myR = myReacts[w.id];
+              const preview = getFormatPreview(w);
+              return (
+                <div
+                  key={w.id}
+                  onClick={() => navigate(`/works/${w.id}`)}
+                  style={{
+                    border: "var(--border-thin)", borderRadius: "var(--radius)", overflow: "hidden",
+                    cursor: "pointer", background: "#fff", display: "flex", flexDirection: "column",
+                    transition: "transform 0.1s, box-shadow 0.1s",
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.transform = "translate(-3px,-3px)"; e.currentTarget.style.boxShadow = "4px 4px 0 var(--black)"; }}
+                  onMouseLeave={e => { e.currentTarget.style.transform = "none"; e.currentTarget.style.boxShadow = "none"; }}
+                >
+                  {/* Preview block — image if available, otherwise a format-icon placeholder or text snippet */}
+                  <div style={{ position: "relative", width: "100%", aspectRatio: "4 / 3", background: preview?.image ? "transparent" : "var(--gray-100)", borderBottom: "var(--border-thin)", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    {preview?.image ? (
+                      <img src={preview.image} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    ) : preview?.text ? (
+                      <div style={{ padding: "16px 18px", fontSize: 12.5, color: "var(--gray-600)", lineHeight: 1.6, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 6, WebkitBoxOrient: "vertical" }}>
+                        {preview.text}
+                      </div>
+                    ) : (
+                      <span style={{ fontSize: 44, opacity: 0.5 }}>{FORMAT_ICON[w.format] || "📁"}</span>
+                    )}
+                    <span className="format-badge" style={{ position: "absolute", top: 10, right: 10 }}>{w.format}</span>
+                  </div>
+
+                  {/* Content block */}
+                  <div style={{ padding: "14px 16px", flex: 1, display: "flex", flexDirection: "column" }}>
+                    <div style={{ fontFamily: "var(--font-serif)", fontSize: 18, letterSpacing: "0.2px", lineHeight: 1.2, marginBottom: 6 }}>{w.title}</div>
+                    {w.description && (
+                      <div style={{ fontSize: 12, color: "var(--gray-600)", lineHeight: 1.5, marginBottom: 8, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>
+                        {w.description}
+                      </div>
+                    )}
+                    {preview?.meta && (
+                      <div style={{ fontSize: 10.5, color: "var(--gray-400)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 8 }}>
+                        {preview.meta}
+                      </div>
+                    )}
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 10 }}>
+                      {(w.tags || []).slice(0, 4).map(t => <span className="tag-chip" key={t} style={{ fontSize: 10 }}>{t}</span>)}
                     </div>
-                  )}
-                  <div className="browse-card-bottom">
-                    <div className="browse-tags">{(w.tags || []).map(t => <span className="tag-chip" key={t}>{t}</span>)}</div>
-                    <div className="browse-reactions">
-                      <button className={`reaction-btn ${myR === "like" ? "active-like" : ""}`} onClick={e => handleReact(e, w.id, "like")} disabled={!session} title={session ? "Like" : "Sign in"}>👍 {counts.likes}</button>
-                      <button className={`reaction-btn ${myR === "dislike" ? "active-dislike" : ""}`} onClick={e => handleReact(e, w.id, "dislike")} disabled={!session} title={session ? "Dislike" : "Sign in"}>👎 {counts.dislikes}</button>
-                      <span style={{ fontSize: 11, color: "var(--gray-400)", fontFamily: "var(--font-mono)", padding: "5px 8px" }}>💬 {commentCounts[w.id] || 0}</span>
+                    <div style={{ marginTop: "auto", display: "flex", alignItems: "center", gap: 6 }}>
+                      <button className={`reaction-btn ${myR === "like" ? "active-like" : ""}`} onClick={e => handleReact(e, w.id, "like")} disabled={!session} title={session ? "Like" : "Sign in"} style={{ padding: "4px 9px", fontSize: 11 }}>👍 {counts.likes}</button>
+                      <button className={`reaction-btn ${myR === "dislike" ? "active-dislike" : ""}`} onClick={e => handleReact(e, w.id, "dislike")} disabled={!session} title={session ? "Dislike" : "Sign in"} style={{ padding: "4px 9px", fontSize: 11 }}>👎 {counts.dislikes}</button>
+                      <span style={{ fontSize: 11, color: "var(--gray-400)", marginLeft: "auto" }}>💬 {commentCounts[w.id] || 0}</span>
                     </div>
                   </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </>
       )}
     </div>

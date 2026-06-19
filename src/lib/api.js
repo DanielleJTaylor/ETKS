@@ -105,6 +105,17 @@ export const Works = {
           for(const rx of rxns){if(!cm[rx.work_id])cm[rx.work_id]={like_count:0,dislike_count:0};if(rx.reaction==="like")cm[rx.work_id].like_count++;if(rx.reaction==="dislike")cm[rx.work_id].dislike_count++;}
           data=data.map(w=>({...w,like_count:cm[w.id]?.like_count||0,dislike_count:cm[w.id]?.dislike_count||0}));
         }
+        // Batch-fetch the first page/file per work (covers comic, visual-novel, pdf, gallery thumbnails)
+        const thumbFormats = data.filter(w => ["comic","visual-novel","pdf","other"].includes(w.format)).map(w => w.id);
+        if (thumbFormats.length > 0) {
+          const fr = await apiFetch(`${SUPABASE_URL}/rest/v1/work_files?work_id=in.(${thumbFormats.join(",")})&order=work_id.asc,sort_order.asc&select=work_id,file_url,file_type`,{headers:anonDbH()});
+          if (fr.ok) {
+            const files = await fr.json();
+            const firstByWork = {};
+            for (const f of files) { if (!firstByWork[f.work_id]) firstByWork[f.work_id] = f; }
+            data = data.map(w => firstByWork[w.id] ? { ...w, _thumb: firstByWork[w.id] } : w);
+          }
+        }
       }
       return {data,error:null};
     } catch(e){return {data:[],error:e.message};}

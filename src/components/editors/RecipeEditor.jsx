@@ -115,6 +115,79 @@ function ImageUploadSlot({ url, onUpload, onRemove, session, workId, pathPrefix,
   );
 }
 
+// ─── COMPACT INGREDIENT ROW ────────────────────────────────────────────────────
+// Single-line layout: tiny icon, amount, unit, name, diet-warning toggle, delete.
+// Diet pills only expand when the warning toggle is clicked, keeping the
+// default state compact so a long ingredient list doesn't take forever to fill in.
+function CompactIngredientRow({ ing, session, workId, onUpdate, onRemove, onToggleExclude }) {
+  const [dietsOpen, setDietsOpen] = useState(false);
+  const [iconUploading, setIconUploading] = useState(false);
+  const brokenCount = (ing.excludes || []).length;
+
+  return (
+    <div style={{ border: "var(--border-thin)", borderRadius: 6, marginBottom: 6, overflow: "hidden" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 8px" }}>
+        <ImageUploadSlot
+          url={ing.icon} session={session} workId={workId} pathPrefix="recipe/ingredients" label="icon"
+          size={34} uploading={iconUploading} setUploading={setIconUploading}
+          onUpload={url => onUpdate({ icon: url })} onRemove={() => onUpdate({ icon: null })}
+        />
+        <input className="input" type="text" placeholder="Amt" value={ing.amount}
+          onChange={e => onUpdate({ amount: e.target.value })}
+          style={{ width: 56, padding: "7px 8px", fontSize: 13, flexShrink: 0 }} />
+        <select className="input" value={ing.unit} onChange={e => onUpdate({ unit: e.target.value })}
+          style={{ width: 78, padding: "7px 6px", fontSize: 13, flexShrink: 0 }}>
+          {UNITS.map(u => <option key={u} value={u}>{u || "—"}</option>)}
+        </select>
+        <input className="input" type="text" placeholder="Ingredient name" value={ing.name}
+          onChange={e => onUpdate({ name: e.target.value })}
+          style={{ flex: 1, minWidth: 100, padding: "7px 10px", fontSize: 13 }} />
+        <button
+          onClick={() => setDietsOpen(o => !o)}
+          title="Mark dietary exclusions"
+          style={{
+            flexShrink: 0, fontSize: 11, fontWeight: 700, padding: "6px 9px", borderRadius: 6,
+            border: "1.5px solid " + (brokenCount > 0 ? "var(--red)" : "var(--gray-200)"),
+            background: brokenCount > 0 ? "#fcebeb" : "#fff",
+            color: brokenCount > 0 ? "var(--red)" : "var(--gray-400)",
+            cursor: "pointer", whiteSpace: "nowrap",
+          }}
+        >
+          ⚠ {brokenCount > 0 ? brokenCount : ""}
+        </button>
+        <button onClick={onRemove} style={{ flexShrink: 0, width: 26, height: 26, borderRadius: 6, border: "1.5px solid var(--black)", background: "var(--red)", color: "#fff", fontSize: 13, cursor: "pointer", lineHeight: 1 }}>×</button>
+      </div>
+      {dietsOpen && (
+        <div style={{ padding: "8px 10px 10px 50px", borderTop: "1px solid var(--gray-100)", background: "var(--gray-100)" }}>
+          <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--gray-400)", marginBottom: 6 }}>
+            This ingredient breaks:
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+            {DIET_TAGS.map(d => {
+              const broken = (ing.excludes || []).includes(d.id);
+              return (
+                <button
+                  key={d.id}
+                  onClick={() => onToggleExclude(d.id)}
+                  style={{
+                    fontSize: 10.5, fontWeight: 700, padding: "3px 10px", borderRadius: 12,
+                    border: "1.5px solid " + (broken ? "var(--red)" : "var(--gray-200)"),
+                    background: broken ? "#fcebeb" : "#fff",
+                    color: broken ? "var(--red)" : "var(--gray-600)",
+                    cursor: "pointer", textDecoration: broken ? "line-through" : "none",
+                  }}
+                >
+                  {d.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── RECIPE SECTION (top-level switch) ────────────────────────────────────────
 export function RecipeSection({ work, canEdit, session }) {
   const [recipe, setRecipe]     = useState(() => parseRecipe(work.content));
@@ -245,53 +318,15 @@ function RecipeEditor({ recipe, work, session, onSave, onDone, saving, savedAt }
             <div style={{ fontSize: 13, color: "var(--gray-400)", marginBottom: 12 }}>No ingredients yet — add your first one below.</div>
           )}
           {ingredients.map(ing => (
-            <div key={ing.id} style={{ border: "var(--border-thin)", borderRadius: 6, padding: 12, marginBottom: 10 }}>
-              <div style={{ display: "flex", gap: 10, marginBottom: 8 }}>
-                <ImageUploadSlot
-                  url={ing.icon} session={session} workId={work.id} pathPrefix="recipe/ingredients" label="Ingredient icon"
-                  size={64} uploading={false} setUploading={() => {}}
-                  onUpload={url => updateIngredient(ing.id, { icon: url })} onRemove={() => updateIngredient(ing.id, { icon: null })}
-                />
-                <div style={{ flex: 1, display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  <input className="input" type="text" placeholder="Amount" value={ing.amount}
-                    onChange={e => updateIngredient(ing.id, { amount: e.target.value })}
-                    style={{ width: 90 }} />
-                  <select className="input" value={ing.unit} onChange={e => updateIngredient(ing.id, { unit: e.target.value })} style={{ width: 110 }}>
-                    {UNITS.map(u => <option key={u} value={u}>{u || "(none)"}</option>)}
-                  </select>
-                  <input className="input" type="text" placeholder="Ingredient name (e.g. all-purpose flour)" value={ing.name}
-                    onChange={e => updateIngredient(ing.id, { name: e.target.value })}
-                    style={{ flex: 1, minWidth: 160 }} />
-                  <button className="btn btn-sm" onClick={() => removeIngredient(ing.id)} style={{ background: "var(--red)", color: "#fff", borderColor: "var(--black)" }}>×</button>
-                </div>
-              </div>
-              <div style={{ fontSize: 10, color: "var(--gray-400)", marginBottom: 8, paddingLeft: 58 }}>
-                No photo uploaded? We'll auto-pick an icon based on the ingredient name.
-              </div>
-              <div style={{ fontSize: 10.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--gray-400)", marginBottom: 6 }}>
-                Mark which diets this ingredient breaks
-              </div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
-                {DIET_TAGS.map(d => {
-                  const broken = (ing.excludes || []).includes(d.id);
-                  return (
-                    <button
-                      key={d.id}
-                      onClick={() => toggleExclude(ing.id, d.id)}
-                      style={{
-                        fontSize: 10.5, fontWeight: 700, padding: "3px 10px", borderRadius: 12,
-                        border: "1.5px solid " + (broken ? "var(--red)" : "var(--gray-200)"),
-                        background: broken ? "#fcebeb" : "#fff",
-                        color: broken ? "var(--red)" : "var(--gray-600)",
-                        cursor: "pointer", textDecoration: broken ? "line-through" : "none",
-                      }}
-                    >
-                      {broken ? `breaks ${d.label}` : d.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
+            <CompactIngredientRow
+              key={ing.id}
+              ing={ing}
+              session={session}
+              workId={work.id}
+              onUpdate={patch => updateIngredient(ing.id, patch)}
+              onRemove={() => removeIngredient(ing.id)}
+              onToggleExclude={dietId => toggleExclude(ing.id, dietId)}
+            />
           ))}
           <button className="btn btn-sm" onClick={addIngredient}>+ Add Ingredient</button>
         </div>
@@ -336,11 +371,15 @@ function RecipeEditor({ recipe, work, session, onSave, onDone, saving, savedAt }
 function StepEditor({ step, index, total, ingredients, session, workId, onUpdate, onRemove, onMove, onToggleIngredient, onAddTool, onRemoveTool }) {
   const [toolInput, setToolInput] = useState("");
   const [imgUploading, setImgUploading] = useState(false);
+  const [ingPickerOpen, setIngPickerOpen] = useState(false);
+  const [toolInputOpen, setToolInputOpen] = useState(false);
   const linkedIds = step.ingredientIds || [];
+  const linkedIngredients = ingredients.filter(i => linkedIds.includes(i.id));
+  const availableIngredients = ingredients.filter(i => i.name.trim() && !linkedIds.includes(i.id));
 
   return (
     <div style={{ border: "var(--border-thin)", borderRadius: 6, padding: 12, marginBottom: 10 }}>
-      <div style={{ display: "flex", gap: 10, marginBottom: 8 }}>
+      <div style={{ display: "flex", gap: 10, marginBottom: 10 }}>
         <ImageUploadSlot
           url={step.image} session={session} workId={workId} pathPrefix="recipe/steps" label="Step photo"
           size={84} uploading={imgUploading} setUploading={setImgUploading}
@@ -356,45 +395,59 @@ function StepEditor({ step, index, total, ingredients, session, workId, onUpdate
             <button className="btn btn-sm" onClick={onRemove} style={{ background: "var(--red)", color: "#fff", borderColor: "var(--black)" }}>×</button>
           </div>
           <textarea className="input" placeholder="Step instructions…" value={step.content}
-            onChange={e => onUpdate({ content: e.target.value })} style={{ minHeight: 60 }} />
+            onChange={e => onUpdate({ content: e.target.value })} style={{ minHeight: 56 }} />
         </div>
       </div>
 
-      {/* Linked ingredients */}
-      {ingredients.length > 0 && (
-        <div style={{ marginTop: 10 }}>
-          <div style={{ fontSize: 10.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--gray-400)", marginBottom: 6 }}>
-            Ingredients used in this step
-          </div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
-            {ingredients.filter(i => i.name.trim()).map(ing => {
-              const active = linkedIds.includes(ing.id);
-              return (
-                <button
-                  key={ing.id}
-                  onClick={() => onToggleIngredient(ing.id)}
-                  style={{
-                    fontSize: 11, fontWeight: 600, padding: "4px 10px", borderRadius: 12,
-                    border: "1.5px solid " + (active ? "var(--black)" : "var(--gray-200)"),
-                    background: active ? "var(--black)" : "#fff",
-                    color: active ? "#fff" : "var(--gray-600)",
-                    cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4,
-                  }}
-                >
-                  <span>{ing.icon ? "" : guessIcon(ing.name)}</span>{ing.name}
-                </button>
-              );
-            })}
-          </div>
+      {/* Ingredients used — compact add-picker */}
+      <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--gray-100)" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+          <span style={{ fontSize: 10.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--gray-400)" }}>Ingredients</span>
+          {availableIngredients.length > 0 && (
+            <button onClick={() => setIngPickerOpen(o => !o)} style={{ fontSize: 11, fontWeight: 700, color: "var(--red)", background: "none", border: "none", cursor: "pointer" }}>
+              + Add
+            </button>
+          )}
         </div>
-      )}
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+          {linkedIngredients.length === 0 && !ingPickerOpen && (
+            <span style={{ fontSize: 12, color: "var(--gray-400)" }}>None linked yet</span>
+          )}
+          {linkedIngredients.map(ing => (
+            <span key={ing.id} className="tag-chip" style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+              {ing.icon ? <img src={ing.icon} alt="" style={{ width: 14, height: 14, borderRadius: 2, objectFit: "cover" }} /> : <span>{guessIcon(ing.name)}</span>}
+              {ing.name}
+              <button onClick={() => onToggleIngredient(ing.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "inherit", fontSize: 12, padding: 0, marginLeft: 2 }}>×</button>
+            </span>
+          ))}
+        </div>
+        {ingPickerOpen && availableIngredients.length > 0 && (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 8, padding: 8, background: "var(--gray-100)", borderRadius: 6 }}>
+            {availableIngredients.map(ing => (
+              <button
+                key={ing.id}
+                onClick={() => { onToggleIngredient(ing.id); }}
+                style={{ fontSize: 11, fontWeight: 600, padding: "4px 10px", borderRadius: 12, border: "1.5px solid var(--gray-200)", background: "#fff", color: "var(--gray-600)", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4 }}
+              >
+                <span>{ing.icon ? "" : guessIcon(ing.name)}</span>{ing.name}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
 
-      {/* Tools */}
-      <div style={{ marginTop: 10 }}>
-        <div style={{ fontSize: 10.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--gray-400)", marginBottom: 6 }}>
-          Tools used (e.g. air fryer, mixing bowl)
+      {/* Tools / devices — compact add-picker */}
+      <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--gray-100)" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+          <span style={{ fontSize: 10.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--gray-400)" }}>Devices &amp; Tools</span>
+          <button onClick={() => setToolInputOpen(o => !o)} style={{ fontSize: 11, fontWeight: 700, color: "var(--red)", background: "none", border: "none", cursor: "pointer" }}>
+            + Add
+          </button>
         </div>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 6 }}>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+          {(step.tools || []).length === 0 && !toolInputOpen && (
+            <span style={{ fontSize: 12, color: "var(--gray-400)" }}>None added yet</span>
+          )}
           {(step.tools || []).map((t, i) => (
             <span key={i} className="tag-chip" style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
               🔧 {t}
@@ -402,13 +455,15 @@ function StepEditor({ step, index, total, ingredients, session, workId, onUpdate
             </span>
           ))}
         </div>
-        <div style={{ display: "flex", gap: 6 }}>
-          <input className="input" type="text" placeholder="Add a tool…" value={toolInput}
-            onChange={e => setToolInput(e.target.value)}
-            onKeyDown={e => { if (e.key === "Enter") { onAddTool(toolInput); setToolInput(""); } }}
-            style={{ maxWidth: 200 }} />
-          <button className="btn btn-sm" onClick={() => { onAddTool(toolInput); setToolInput(""); }}>Add</button>
-        </div>
+        {toolInputOpen && (
+          <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+            <input className="input" type="text" placeholder="e.g. air fryer, mixing bowl…" value={toolInput} autoFocus
+              onChange={e => setToolInput(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") { onAddTool(toolInput); setToolInput(""); } }}
+              style={{ maxWidth: 220, padding: "6px 10px", fontSize: 12 }} />
+            <button className="btn btn-sm" onClick={() => { onAddTool(toolInput); setToolInput(""); }}>Add</button>
+          </div>
+        )}
       </div>
     </div>
   );
