@@ -800,28 +800,29 @@ export function RecipeViewer({ recipe, canEdit, onEdit }) {
             const linkedIngredients = (s.ingredientIds || []).map(id => ingredientById[id]).filter(Boolean);
             const devices = s.devices || [];
             return (
-              <div key={s.id} style={{ marginBottom: 26 }}>
+              <div key={s.id} style={{ marginBottom: 18, border: "var(--border-thin)", borderRadius: 10, overflow: "hidden" }}>
                 {s.image && (
-                  <img src={s.image} alt="" style={{ display: "block", maxWidth: "100%", width: "auto", height: "auto", maxHeight: 285, borderRadius: 10, marginBottom: 16, marginLeft: "auto", marginRight: "auto" }} />
+                  <img src={s.image} alt="" style={{ display: "block", width: "100%", height: "auto", maxHeight: 320, objectFit: "cover" }} />
                 )}
-                <div style={{ marginBottom: 6 }}>
-                  <span style={{ fontFamily: "var(--font-serif)", fontSize: 14, color: "var(--red)" }}>Step {i + 1}</span>
-                </div>
-                <div style={{ fontSize: 13.5, color: "var(--gray-600)", lineHeight: 1.7, marginBottom: 8 }}>{s.content}</div>
-                {(linkedIngredients.length > 0 || devices.length > 0) && (
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
-                    {linkedIngredients.map(ing => (
-                      <span key={ing.id} className="tag-chip" style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 10.5 }}>
-                        <IngredientIcon name={nameOf(ing)} size={18} />
-                        {quantityOf(ing) ? `${fmtQuantity(quantityOf(ing))} ${nameOf(ing)}` : rawLine(ing)}
-                      </span>
-                    ))}
-                    {devices.map((entry, di) => (
-                      <span key={di} className="tag-chip" style={{ fontSize: 10.5, background: "var(--gray-100)" }}>{formatDeviceEntry(entry)}</span>
-                    ))}
+                <div style={{ padding: "14px 16px" }}>
+                  <div style={{ marginBottom: 6 }}>
+                    <span style={{ fontFamily: "var(--font-serif)", fontSize: 14, color: "var(--red)" }}>Step {i + 1}</span>
                   </div>
-                )}
-                {i < steps.length - 1 && <div style={{ height: "0.5px", background: "var(--gray-200)", marginTop: 20 }} />}
+                  <div style={{ fontSize: 13.5, color: "var(--gray-600)", lineHeight: 1.7, marginBottom: 8 }}>{s.content}</div>
+                  {(linkedIngredients.length > 0 || devices.length > 0) && (
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+                      {linkedIngredients.map(ing => (
+                        <span key={ing.id} className="tag-chip" style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 10.5 }}>
+                          <IngredientIcon name={nameOf(ing)} size={18} />
+                          {quantityOf(ing) ? `${fmtQuantity(quantityOf(ing))} ${nameOf(ing)}` : rawLine(ing)}
+                        </span>
+                      ))}
+                      {devices.map((entry, di) => (
+                        <span key={di} className="tag-chip" style={{ fontSize: 10.5, background: "var(--gray-100)" }}>{formatDeviceEntry(entry)}</span>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             );
           })}
