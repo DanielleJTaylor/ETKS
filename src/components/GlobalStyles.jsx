@@ -78,6 +78,10 @@ export default function GlobalStyles() {
       .page-loading { display:flex; align-items:center; justify-content:center; padding:80px 0; gap:10px; color:var(--gray-400); font-size:13px; }
 
       .tag-chip { font-family:var(--font-sans); font-size:11px; font-weight:700; padding:4px 11px; border:var(--border-thin); border-radius:var(--radius-pill); background:var(--white); letter-spacing:0.01em; }
+      .inline-tag-input .input { width:120px; font-size:11px; font-weight:700; padding:4px 11px; border:1.5px dashed var(--gray-400); border-radius:var(--radius-pill); background:transparent; color:var(--black); transition:border-color 0.12s, width 0.15s; }
+      .inline-tag-input .input::placeholder { color:var(--gray-400); font-weight:700; }
+      .inline-tag-input .input:focus { border-style:solid; border-color:var(--red); width:160px; }
+      .inline-tag-input .tag-suggestions { font-size:11px; }
       .format-badge { font-family:var(--font-sans); font-size:10px; font-weight:700; padding:4px 10px; border-radius:var(--radius-pill); border:var(--border-thin); background:var(--yellow); color:var(--black); letter-spacing:0.03em; text-transform:uppercase; white-space:nowrap; }
       .vis-badge { font-size:10px; font-weight:700; padding:4px 10px; border-radius:var(--radius-pill); letter-spacing:0.03em; text-transform:uppercase; border:var(--border-thin); white-space:nowrap; }
       .vis-badge.private { color:var(--gray-600); border-color:var(--gray-400); }

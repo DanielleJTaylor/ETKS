@@ -167,10 +167,10 @@ export default function WorkDetail() {
               )}
             </span>
           ))}
-          {canEdit && (
-            <div style={{ display: "inline-flex", alignItems: "center", gap: 6, width: 180 }}>
-              <TagInput placeholder="Add tag…" onAdd={addTag} disabled={tags.length >= 20} />
-              {tagSaving && <span className="spinner" style={{ borderColor: "var(--gray-400)", borderTopColor: "transparent" }} />}
+          {canEdit && tags.length < 20 && (
+            <div className="inline-tag-input" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+              <TagInput placeholder="+ Add tag" onAdd={addTag} disabled={tags.length >= 20} />
+              {tagSaving && <span className="spinner" style={{ borderColor: "var(--gray-400)", borderTopColor: "transparent", width: 11, height: 11 }} />}
             </div>
           )}
         </div>
