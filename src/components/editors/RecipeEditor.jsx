@@ -11,6 +11,44 @@ const DIET_TAGS = [
   { id: "vegan",       label: "Vegan"       },
 ];
 
+// ─── DEVICES & TOOLS ──────────────────────────────────────────────────────────
+// Curated cooking devices, each with its own setting type — temperature,
+// speed, or heat level — so "Air Fryer at 450°F" or "Blender on Medium" can
+// be picked precisely instead of typed as loose free text.
+const DEVICES = [
+  { id: "oven",        label: "Oven",         icon: "🔥", settingType: "temp" },
+  { id: "air-fryer",   label: "Air Fryer",    icon: "🌀", settingType: "temp" },
+  { id: "stovetop",    label: "Stovetop",     icon: "🍳", settingType: "heat" },
+  { id: "slow-cooker", label: "Slow Cooker",  icon: "🍲", settingType: "heat" },
+  { id: "instant-pot", label: "Instant Pot",  icon: "♨️", settingType: "heat" },
+  { id: "grill",       label: "Grill",        icon: "🔥", settingType: "temp" },
+  { id: "blender",     label: "Blender",      icon: "🌪️", settingType: "speed" },
+  { id: "mixer",       label: "Mixer",        icon: "🥣", settingType: "speed" },
+  { id: "microwave",   label: "Microwave",    icon: "📡", settingType: "temp" },
+  { id: "toaster",     label: "Toaster",      icon: "🍞", settingType: "none" },
+  { id: "bowl",        label: "Mixing Bowl",  icon: "🥣", settingType: "none" },
+  { id: "pan",         label: "Pan / Skillet", icon: "🍳", settingType: "none" },
+  { id: "pot",         label: "Pot",          icon: "🥘", settingType: "none" },
+  { id: "baking-sheet", label: "Baking Sheet", icon: "🧈", settingType: "none" },
+  { id: "knife",       label: "Knife",        icon: "🔪", settingType: "none" },
+  { id: "other",       label: "Other",        icon: "🔧", settingType: "none" },
+];
+
+const HEAT_LEVELS = ["Low", "Medium", "High"];
+const SPEED_LEVELS = ["Low", "Medium", "High"];
+
+const DEVICE_BY_ID = Object.fromEntries(DEVICES.map(d => [d.id, d]));
+
+function formatDeviceEntry(entry) {
+  const d = DEVICE_BY_ID[entry.device];
+  if (!d) return entry.device || "";
+  const icon = d.icon ? `${d.icon} ` : "";
+  if (!entry.setting) return `${icon}${d.label}`;
+  if (d.settingType === "temp") return `${icon}${d.label} at ${entry.setting}`;
+  if (d.settingType === "heat" || d.settingType === "speed") return `${icon}${d.label} on ${entry.setting}`;
+  return `${icon}${d.label}`;
+}
+
 // Curated ingredient categories, each with keywords used to auto-match an
 // ingredient's typed name. No manual picker — the icon is always derived
 // automatically from what the author types. Unmatched ingredients show a
@@ -352,7 +390,7 @@ function RecipeEditor({ recipe, work, session, onSave, onDone, saving, savedAt }
     setIngredients(next);
   };
 
-  const addStep = () => setSteps([...steps, { id: uid(), title: "", content: "", image: null, ingredientIds: [], tools: [] }]);
+  const addStep = () => setSteps([...steps, { id: uid(), title: "", content: "", image: null, ingredientIds: [], devices: [] }]);
   const updateStep = (id, patch) => setSteps(steps.map(s => s.id === id ? { ...s, ...patch } : s));
   const removeStep = (id) => setSteps(steps.filter(s => s.id !== id));
   const moveStep = (idx, dir) => {
@@ -370,12 +408,19 @@ function RecipeEditor({ recipe, work, session, onSave, onDone, saving, savedAt }
       return { ...s, ingredientIds: next };
     }));
   };
-  const addTool = (stepId, toolName) => {
-    if (!toolName.trim()) return;
-    setSteps(steps.map(s => s.id === stepId ? { ...s, tools: [...(s.tools || []), toolName.trim()] } : s));
+  const addDevice = (stepId, deviceId) => {
+    setSteps(steps.map(s => s.id === stepId ? { ...s, devices: [...(s.devices || []), { device: deviceId, setting: "" }] } : s));
   };
-  const removeTool = (stepId, idx) => {
-    setSteps(steps.map(s => s.id === stepId ? { ...s, tools: (s.tools || []).filter((_, i) => i !== idx) } : s));
+  const updateDevice = (stepId, idx, setting) => {
+    setSteps(steps.map(s => {
+      if (s.id !== stepId) return s;
+      const next = [...(s.devices || [])];
+      next[idx] = { ...next[idx], setting };
+      return { ...s, devices: next };
+    }));
+  };
+  const removeDevice = (stepId, idx) => {
+    setSteps(steps.map(s => s.id === stepId ? { ...s, devices: (s.devices || []).filter((_, i) => i !== idx) } : s));
   };
 
   return (
@@ -453,8 +498,9 @@ function RecipeEditor({ recipe, work, session, onSave, onDone, saving, savedAt }
               onRemove={() => removeStep(s.id)}
               onMove={dir => moveStep(i, dir)}
               onToggleIngredient={ingId => toggleStepIngredient(s.id, ingId)}
-              onAddTool={name => addTool(s.id, name)}
-              onRemoveTool={idx => removeTool(s.id, idx)}
+              onAddDevice={deviceId => addDevice(s.id, deviceId)}
+              onUpdateDevice={(idx, setting) => updateDevice(s.id, idx, setting)}
+              onRemoveDevice={idx => removeDevice(s.id, idx)}
             />
           ))}
           <button className="btn btn-sm" onClick={addStep}>+ Add Step</button>
@@ -471,11 +517,10 @@ function RecipeEditor({ recipe, work, session, onSave, onDone, saving, savedAt }
   );
 }
 
-function StepEditor({ step, index, total, ingredients, session, workId, onUpdate, onRemove, onMove, onToggleIngredient, onAddTool, onRemoveTool }) {
-  const [toolInput, setToolInput] = useState("");
+function StepEditor({ step, index, total, ingredients, session, workId, onUpdate, onRemove, onMove, onToggleIngredient, onAddDevice, onUpdateDevice, onRemoveDevice }) {
   const [imgUploading, setImgUploading] = useState(false);
   const [ingPickerOpen, setIngPickerOpen] = useState(false);
-  const [toolInputOpen, setToolInputOpen] = useState(false);
+  const [devicePickerOpen, setDevicePickerOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const linkedIds = step.ingredientIds || [];
   const linkedIngredients = ingredients.filter(i => linkedIds.includes(i.id));
@@ -553,32 +598,66 @@ function StepEditor({ step, index, total, ingredients, session, workId, onUpdate
         )}
       </div>
 
-      {/* Tools / devices — compact add-picker */}
+      {/* Devices & tools — curated picker with structured settings per device */}
       <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--gray-100)" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
           <span style={{ fontSize: 10.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--gray-400)" }}>Devices &amp; Tools</span>
-          <button onClick={() => setToolInputOpen(o => !o)} style={{ fontSize: 11, fontWeight: 700, color: "var(--red)", background: "none", border: "none", cursor: "pointer" }}>
+          <button onClick={() => setDevicePickerOpen(o => !o)} style={{ fontSize: 11, fontWeight: 700, color: "var(--red)", background: "none", border: "none", cursor: "pointer" }}>
             + Add
           </button>
         </div>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
-          {(step.tools || []).length === 0 && !toolInputOpen && (
-            <span style={{ fontSize: 12, color: "var(--gray-400)" }}>None added yet</span>
-          )}
-          {(step.tools || []).map((t, i) => (
-            <span key={i} className="tag-chip" style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
-              🔧 {t}
-              <button onClick={() => onRemoveTool(i)} style={{ background: "none", border: "none", cursor: "pointer", color: "inherit", fontSize: 12, padding: 0 }}>×</button>
-            </span>
-          ))}
-        </div>
-        {toolInputOpen && (
-          <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
-            <input className="input" type="text" placeholder="e.g. air fryer, mixing bowl…" value={toolInput} autoFocus
-              onChange={e => setToolInput(e.target.value)}
-              onKeyDown={e => { if (e.key === "Enter") { onAddTool(toolInput); setToolInput(""); } }}
-              style={{ maxWidth: 220, padding: "6px 10px", fontSize: 12 }} />
-            <button className="btn btn-sm" onClick={() => { onAddTool(toolInput); setToolInput(""); }}>Add</button>
+
+        {(step.devices || []).length === 0 && !devicePickerOpen && (
+          <span style={{ fontSize: 12, color: "var(--gray-400)" }}>None added yet</span>
+        )}
+
+        {(step.devices || []).map((entry, i) => {
+          const d = DEVICE_BY_ID[entry.device];
+          if (!d) return null;
+          return (
+            <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6, padding: "6px 10px", background: "var(--gray-100)", borderRadius: 6 }}>
+              <span style={{ fontSize: 14 }}>{d.icon}</span>
+              <span style={{ fontSize: 12.5, fontWeight: 600, minWidth: 90 }}>{d.label}</span>
+              {d.settingType === "temp" && (
+                <input className="input" type="text" placeholder="e.g. 450°F" value={entry.setting}
+                  onChange={e => onUpdateDevice(i, e.target.value)}
+                  style={{ width: 110, padding: "5px 8px", fontSize: 12 }} />
+              )}
+              {(d.settingType === "heat" || d.settingType === "speed") && (
+                <div style={{ display: "flex", gap: 4 }}>
+                  {(d.settingType === "heat" ? HEAT_LEVELS : SPEED_LEVELS).map(level => (
+                    <button
+                      key={level}
+                      onClick={() => onUpdateDevice(i, level)}
+                      style={{
+                        fontSize: 11, fontWeight: 700, padding: "4px 10px", borderRadius: 10,
+                        border: "1.5px solid " + (entry.setting === level ? "var(--black)" : "var(--gray-200)"),
+                        background: entry.setting === level ? "var(--black)" : "#fff",
+                        color: entry.setting === level ? "#fff" : "var(--gray-600)",
+                        cursor: "pointer",
+                      }}
+                    >
+                      {level}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <button onClick={() => onRemoveDevice(i)} style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", color: "var(--gray-400)", fontSize: 14, padding: 0 }}>×</button>
+            </div>
+          );
+        })}
+
+        {devicePickerOpen && (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 8, padding: 8, background: "var(--gray-100)", borderRadius: 6 }}>
+            {DEVICES.map(d => (
+              <button
+                key={d.id}
+                onClick={() => { onAddDevice(d.id); setDevicePickerOpen(false); }}
+                style={{ fontSize: 11, fontWeight: 600, padding: "4px 10px", borderRadius: 12, border: "1.5px solid var(--gray-200)", background: "#fff", color: "var(--gray-600)", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4 }}
+              >
+                <span>{d.icon}</span>{d.label}
+              </button>
+            ))}
           </div>
         )}
       </div>
@@ -690,18 +769,18 @@ export function RecipeViewer({ recipe, canEdit, onEdit }) {
         <div style={{ padding: 22 }}>
           {steps.map((s, i) => {
             const linkedIngredients = (s.ingredientIds || []).map(id => ingredientById[id]).filter(Boolean);
-            const tools = s.tools || [];
+            const devices = s.devices || [];
             return (
               <div key={s.id} style={{ marginBottom: 26 }}>
                 {s.image && (
-                  <img src={s.image} alt="" style={{ width: "100%", height: "auto", maxHeight: 248, objectFit: "contain", borderRadius: 10, border: "var(--border-thin)", marginBottom: 16, display: "block", background: "var(--gray-100)" }} />
+                  <img src={s.image} alt="" style={{ display: "block", maxWidth: "100%", width: "auto", height: "auto", maxHeight: 285, borderRadius: 10, marginBottom: 16, marginLeft: "auto", marginRight: "auto" }} />
                 )}
                 <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 6 }}>
                   <span style={{ fontFamily: "var(--font-serif)", fontSize: 14, color: "var(--red)" }}>Step {i + 1}</span>
                   {s.title && <span style={{ fontSize: 14, fontWeight: 700 }}>{s.title}</span>}
                 </div>
                 <div style={{ fontSize: 13.5, color: "var(--gray-600)", lineHeight: 1.7, marginBottom: 8 }}>{s.content}</div>
-                {(linkedIngredients.length > 0 || tools.length > 0) && (
+                {(linkedIngredients.length > 0 || devices.length > 0) && (
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
                     {linkedIngredients.map(ing => (
                       <span key={ing.id} className="tag-chip" style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 10.5 }}>
@@ -709,8 +788,8 @@ export function RecipeViewer({ recipe, canEdit, onEdit }) {
                         {quantityOf(ing) ? `${fmtQuantity(quantityOf(ing))} ${nameOf(ing)}` : rawLine(ing)}
                       </span>
                     ))}
-                    {tools.map((t, ti) => (
-                      <span key={ti} className="tag-chip" style={{ fontSize: 10.5, background: "var(--gray-100)" }}>🔧 {t}</span>
+                    {devices.map((entry, di) => (
+                      <span key={di} className="tag-chip" style={{ fontSize: 10.5, background: "var(--gray-100)" }}>{formatDeviceEntry(entry)}</span>
                     ))}
                   </div>
                 )}
