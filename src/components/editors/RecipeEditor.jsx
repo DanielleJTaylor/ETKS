@@ -11,8 +11,6 @@ const DIET_TAGS = [
   { id: "vegan",       label: "Vegan"       },
 ];
 
-const UNITS = ["", "g", "kg", "ml", "l", "tsp", "tbsp", "cup", "fl oz", "oz", "lb", "pinch"];
-
 // Curated ingredient categories, each with keywords used to auto-match an
 // ingredient's typed name. No manual picker — the icon is always derived
 // automatically from what the author types. Unmatched ingredients show a
@@ -165,10 +163,9 @@ function CompactIngredientRow({ ing, index, total, session, workId, onUpdate, on
         <input className="input" type="text" placeholder="Amt" value={ing.amount}
           onChange={e => onUpdate({ amount: e.target.value })}
           style={{ width: 56, padding: "7px 8px", fontSize: 13, flexShrink: 0 }} />
-        <select className="input" value={ing.unit} onChange={e => onUpdate({ unit: e.target.value })}
-          style={{ width: 78, padding: "7px 6px", fontSize: 13, flexShrink: 0 }}>
-          {UNITS.map(u => <option key={u} value={u}>{u || "—"}</option>)}
-        </select>
+        <input className="input" type="text" placeholder="Unit" value={ing.unit}
+          onChange={e => onUpdate({ unit: e.target.value })}
+          style={{ width: 70, padding: "7px 8px", fontSize: 13, flexShrink: 0 }} />
         <input className="input" type="text" placeholder="Ingredient name" value={ing.name}
           onChange={e => onUpdate({ name: e.target.value })}
           style={{ flex: 1, minWidth: 100, padding: "7px 10px", fontSize: 13 }} />
@@ -298,6 +295,17 @@ function RecipeEditor({ recipe, work, session, onSave, onDone, saving, savedAt }
 
   const save = () => onSave({ baseServings, heroImage, ingredients, steps, notes });
 
+  // Auto-save: any change to recipe content is written to Supabase a moment
+  // after the person stops typing/editing, so nothing is lost even if they
+  // never click "Save" — fields stay fully editable afterward regardless.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      onSave({ baseServings, heroImage, ingredients, steps, notes });
+    }, 900);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [baseServings, heroImage, ingredients, steps, notes]);
+
   const addIngredient = () => {
     setIngredients([...ingredients, { id: uid(), amount: "", unit: "", name: "", excludes: [] }]);
   };
@@ -354,9 +362,13 @@ function RecipeEditor({ recipe, work, session, onSave, onDone, saving, savedAt }
     <div style={{ border: "var(--border-thin)", borderRadius: "var(--radius)", overflow: "hidden" }}>
       <div style={{ padding: "12px 18px", background: "var(--black)", display: "flex", alignItems: "center", gap: 10 }}>
         <span style={{ fontFamily: "var(--font-serif)", fontSize: 17, color: "var(--white)", letterSpacing: "0.4px" }}>Editing Recipe</span>
+        <span style={{ fontSize: 11, color: "rgba(255,255,255,0.5)" }}>— changes save automatically</span>
         <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center" }}>
-          {savedAt && !saving && <span style={{ fontSize: 11, color: "#9ef01a" }}>✓ Saved</span>}
-          <button className="btn btn-sm" onClick={save} disabled={saving}>{saving ? <><span className="spinner" /> Saving…</> : "Save"}</button>
+          {saving ? (
+            <span style={{ fontSize: 11, color: "rgba(255,255,255,0.6)", display: "flex", alignItems: "center", gap: 5 }}><span className="spinner" /> Saving…</span>
+          ) : savedAt ? (
+            <span style={{ fontSize: 11, color: "#9ef01a" }}>✓ Saved</span>
+          ) : null}
           <button className="btn btn-sm" onClick={() => { save(); onDone(); }} style={{ background: "var(--yellow)", borderColor: "var(--black)" }}>Done Editing</button>
         </div>
       </div>
@@ -637,7 +649,7 @@ export function RecipeViewer({ recipe, canEdit, onEdit }) {
             return (
               <div key={s.id} style={{ marginBottom: 26 }}>
                 {s.image && (
-                  <img src={s.image} alt="" style={{ width: "100%", maxHeight: 440, objectFit: "cover", borderRadius: 10, border: "var(--border-thin)", marginBottom: 16, display: "block" }} />
+                  <img src={s.image} alt="" style={{ width: "100%", maxHeight: 216, objectFit: "cover", borderRadius: 10, border: "var(--border-thin)", marginBottom: 16, display: "block" }} />
                 )}
                 <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 6 }}>
                   <span style={{ fontFamily: "var(--font-serif)", fontSize: 14, color: "var(--red)" }}>Step {i + 1}</span>
