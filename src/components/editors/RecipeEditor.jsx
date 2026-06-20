@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Works, uploadToStorage } from "../../lib/api";
 
 // ─── DIETARY SUB-TAGS ─────────────────────────────────────────────────────────
-const DIET_TAGS = [
+export const DIET_TAGS = [
   { id: "gluten-free", label: "Gluten-Free" },
   { id: "dairy-free",  label: "Dairy-Free"  },
   { id: "egg-free",    label: "Egg-Free"    },
@@ -207,7 +207,7 @@ function ImageUploadSlot({ url, onUpload, onRemove, session, workId, pathPrefix,
 // Ingredients are stored as one free-text `line` (e.g. "2 tbsp avocado oil").
 // `quantityOf` best-effort extracts a leading quantity for servings scaling;
 // `nameOf` strips that quantity back off for display/matching purposes.
-function rawLine(ing) {
+export function rawLine(ing) {
   if (ing.line != null) return ing.line;
   // Backward-compat for recipes saved before this single-field format.
   return [ing.quantity ?? [ing.amount, ing.unit].filter(Boolean).join(" "), ing.name].filter(Boolean).join(" ").trim();
@@ -221,7 +221,7 @@ function quantityOf(ing) {
   return m ? m[1].trim() : "";
 }
 
-function nameOf(ing) {
+export function nameOf(ing) {
   const line = rawLine(ing).trim();
   const m = line.match(QTY_PATTERN);
   return m ? m[2].trim() : line;
@@ -316,7 +316,7 @@ function CompactIngredientRow({ ing, index, total, session, workId, onUpdate, on
 }
 
 // ─── RECIPE SECTION (top-level switch) ────────────────────────────────────────
-export function RecipeSection({ work, canEdit, session }) {
+export function RecipeSection({ work, canEdit, session, onContentChange }) {
   const [recipe, setRecipe]     = useState(() => parseRecipe(work.content));
   const [editMode, setEditMode] = useState(false);
   const [saving, setSaving]     = useState(false);
@@ -331,6 +331,7 @@ export function RecipeSection({ work, canEdit, session }) {
     await saveRecipe(session.access_token, work.id, next);
     setSaving(false);
     setSavedAt(Date.now());
+    onContentChange?.(JSON.stringify({ recipe: next }));
   };
 
   return (
@@ -740,8 +741,6 @@ export function RecipeViewer({ recipe, canEdit, onEdit }) {
   const steps = recipe.steps || [];
   const ingredientById = Object.fromEntries(ingredients.map(i => [i.id, i]));
 
-  const recipeWideDiets = DIET_TAGS.filter(d => ingredients.length > 0 && ingredients.every(ing => !(ing.excludes || []).includes(d.id)));
-
   if (ingredients.length === 0 && steps.length === 0) {
     return (
       <div style={{ textAlign: "center", padding: "60px 24px" }}>
@@ -756,23 +755,6 @@ export function RecipeViewer({ recipe, canEdit, onEdit }) {
       {recipe.heroImage && (
         <div style={{ width: "100%", maxHeight: 460, overflow: "hidden", borderBottom: "var(--border-thin)" }}>
           <img src={recipe.heroImage} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
-        </div>
-      )}
-
-      {recipeWideDiets.length > 0 && (
-        <div style={{ padding: "10px 18px", borderBottom: "var(--border-thin)", display: "flex", flexWrap: "wrap", gap: 6 }}>
-          {recipeWideDiets.map(d => (
-            <span key={d.id} className="tag-chip" style={{ background: "#eaf3de", borderColor: "#639922", color: "#3b6d11" }}>{d.label}</span>
-          ))}
-        </div>
-      )}
-
-      {ingredients.length > 0 && (
-        <div style={{ padding: "10px 18px", borderBottom: "var(--border-thin)", display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
-          <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--gray-400)", marginRight: 2 }}>Ingredients:</span>
-          {[...new Set(ingredients.map(ing => nameOf(ing)).filter(Boolean))].map(name => (
-            <span key={name} className="tag-chip" style={{ fontSize: 10.5 }}>{name}</span>
-          ))}
         </div>
       )}
 

@@ -4,7 +4,7 @@ import { useAuth } from "../lib/AuthContext";
 import { Works, Reactions, Profiles } from "../lib/api";
 import ProseEditor, { ProseViewer } from "../components/editors/ProseEditor";
 import { ComicSection, PDFSection, ImageGallery } from "../components/editors/FormatEditors";
-import { RecipeSection } from "../components/editors/RecipeEditor";
+import { RecipeSection, DIET_TAGS, nameOf } from "../components/editors/RecipeEditor";
 import CommentsSection from "../components/CommentsSection";
 import TagInput from "../components/TagInput";
 
@@ -28,6 +28,24 @@ export default function WorkDetail() {
   // canEdit is true whenever the signed-in user owns this work — regardless
   // of which page they navigated from (Browse, Dashboard, a direct link, etc.)
   const canEdit = !!(session && work && session.user?.id === work.user_id);
+
+  // For recipes, derive the diet badges and ingredient-name tags from the
+  // saved content so they can render in the header alongside manual tags.
+  const recipeAutoTags = (() => {
+    if (!work || work.format !== "recipe" || !work.content) return { diet: [], ingredients: [] };
+    try {
+      const parsed = JSON.parse(work.content);
+      const ingredients = parsed.recipe?.ingredients || [];
+      if (ingredients.length === 0) return { diet: [], ingredients: [] };
+      const diet = DIET_TAGS
+        .filter(d => ingredients.every(ing => !(ing.excludes || []).includes(d.id)))
+        .map(d => d.label);
+      const ingredientNames = [...new Set(ingredients.map(ing => nameOf(ing)).filter(Boolean))];
+      return { diet, ingredients: ingredientNames };
+    } catch {
+      return { diet: [], ingredients: [] };
+    }
+  })();
 
   useEffect(() => {
     Works.fetchOne(id, session?.access_token).then(({ data, error: err }) => {
@@ -173,6 +191,12 @@ export default function WorkDetail() {
               {tagSaving && <span className="spinner" style={{ borderColor: "var(--gray-400)", borderTopColor: "transparent", width: 11, height: 11 }} />}
             </div>
           )}
+          {recipeAutoTags.diet.map(label => (
+            <span key={`diet-${label}`} className="tag-chip" style={{ background: "#eaf3de", borderColor: "#639922", color: "#3b6d11" }}>{label}</span>
+          ))}
+          {recipeAutoTags.ingredients.map(name => (
+            <span key={`ing-${name}`} className="tag-chip" style={{ fontSize: 10.5, background: "var(--gray-100)", color: "var(--gray-600)" }}>{name}</span>
+          ))}
         </div>
       </div>
 
@@ -213,7 +237,7 @@ export default function WorkDetail() {
           <PDFSection key={workKey} work={work} canEdit={canEdit} session={session} />
         )}
         {work.format === "recipe" && (
-          <RecipeSection key={workKey} work={work} canEdit={canEdit} session={session} />
+          <RecipeSection key={workKey} work={work} canEdit={canEdit} session={session} onContentChange={content => setWork(w => ({ ...w, content }))} />
         )}
         {work.format === "other" && (
           <ImageGallery key={workKey} work={work} canEdit={canEdit} session={session} />
