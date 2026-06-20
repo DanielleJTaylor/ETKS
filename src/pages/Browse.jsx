@@ -107,6 +107,17 @@ const FORMAT_ICON = {
   prose: "📖", comic: "🖼️", "visual-novel": "🎬", pdf: "📄", recipe: "🍳", other: "🗂️",
 };
 
+// Mirrors the dietary sub-tag set in RecipeEditor.jsx — a diet only applies
+// to the whole recipe if no ingredient explicitly breaks it.
+const DIET_TAGS = [
+  { id: "gluten-free", label: "Gluten-Free" },
+  { id: "dairy-free",  label: "Dairy-Free"  },
+  { id: "egg-free",    label: "Egg-Free"    },
+  { id: "nut-free",    label: "Nut-Free"    },
+  { id: "soy-free",    label: "Soy-Free"    },
+  { id: "vegan",       label: "Vegan"       },
+];
+
 function getFormatPreview(w) {
   // Image-bearing formats: comic/visual-novel/pdf/other use the batched _thumb;
   // recipe uses its own hero image stored in content.
@@ -119,13 +130,17 @@ function getFormatPreview(w) {
     const parsed = JSON.parse(w.content);
     if (w.format === "recipe" && parsed.recipe) {
       const r = parsed.recipe;
-      const ingCount = (r.ingredients || []).length;
+      const ingredients = r.ingredients || [];
+      const ingCount = ingredients.length;
       const stepCount = (r.steps || []).length;
       const bits = [];
       if (ingCount) bits.push(`${ingCount} ingredient${ingCount !== 1 ? "s" : ""}`);
       if (stepCount) bits.push(`${stepCount} step${stepCount !== 1 ? "s" : ""}`);
       if (r.baseServings) bits.push(`serves ${r.baseServings}`);
-      return { text: bits.join(" · ") || null, image: r.heroImage || null };
+      const dietTags = DIET_TAGS
+        .filter(d => ingCount > 0 && ingredients.every(ing => !(ing.excludes || []).includes(d.id)))
+        .map(d => d.label);
+      return { text: bits.join(" · ") || null, image: r.heroImage || null, dietTags };
     }
     if (w.format === "prose" && parsed.chapters) {
       const chCount = parsed.chapters.length;
@@ -296,39 +311,40 @@ export default function Browse() {
             </div>
           )}
 
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 18 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(420px, 1fr))", gap: 18 }}>
             {results.map(w => {
               const counts = reactCounts[w.id] || { likes: 0, dislikes: 0 }; const myR = myReacts[w.id];
               const preview = getFormatPreview(w);
+              const allTags = [...(w.tags || []), ...(preview?.dietTags || [])];
               return (
                 <div
                   key={w.id}
                   onClick={() => navigate(`/works/${w.id}`)}
                   style={{
                     border: "var(--border-thin)", borderRadius: "var(--radius)", overflow: "hidden",
-                    cursor: "pointer", background: "#fff", display: "flex", flexDirection: "column",
+                    cursor: "pointer", background: "#fff", display: "flex",
                     transition: "transform 0.1s, box-shadow 0.1s",
                   }}
                   onMouseEnter={e => { e.currentTarget.style.transform = "translate(-3px,-3px)"; e.currentTarget.style.boxShadow = "4px 4px 0 var(--black)"; }}
                   onMouseLeave={e => { e.currentTarget.style.transform = "none"; e.currentTarget.style.boxShadow = "none"; }}
                 >
                   {/* Preview block — image if available, otherwise a format-icon placeholder or text snippet */}
-                  <div style={{ position: "relative", width: "100%", aspectRatio: "4 / 3", background: preview?.image ? "transparent" : "var(--gray-100)", borderBottom: "var(--border-thin)", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <div style={{ position: "relative", width: 160, flexShrink: 0, background: preview?.image ? "transparent" : "var(--gray-100)", borderRight: "var(--border-thin)", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center" }}>
                     {preview?.image ? (
                       <img src={preview.image} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                     ) : preview?.text ? (
-                      <div style={{ padding: "16px 18px", fontSize: 12.5, color: "var(--gray-600)", lineHeight: 1.6, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 6, WebkitBoxOrient: "vertical" }}>
+                      <div style={{ padding: "14px", fontSize: 11.5, color: "var(--gray-600)", lineHeight: 1.5, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 7, WebkitBoxOrient: "vertical" }}>
                         {preview.text}
                       </div>
                     ) : (
-                      <span style={{ fontSize: 44, opacity: 0.5 }}>{FORMAT_ICON[w.format] || "📁"}</span>
+                      <span style={{ fontSize: 40, opacity: 0.5 }}>{FORMAT_ICON[w.format] || "📁"}</span>
                     )}
-                    <span className="format-badge" style={{ position: "absolute", top: 10, right: 10 }}>{w.format}</span>
+                    <span className="format-badge" style={{ position: "absolute", top: 8, left: 8 }}>{w.format}</span>
                   </div>
 
                   {/* Content block */}
-                  <div style={{ padding: "14px 16px", flex: 1, display: "flex", flexDirection: "column" }}>
-                    <div style={{ fontFamily: "var(--font-serif)", fontSize: 18, letterSpacing: "0.2px", lineHeight: 1.2, marginBottom: 6 }}>{w.title}</div>
+                  <div style={{ padding: "14px 16px", flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
+                    <div style={{ fontFamily: "var(--font-serif)", fontSize: 19, letterSpacing: "0.2px", lineHeight: 1.2, marginBottom: 6 }}>{w.title}</div>
                     {w.description && (
                       <div style={{ fontSize: 12, color: "var(--gray-600)", lineHeight: 1.5, marginBottom: 8, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>
                         {w.description}
@@ -340,7 +356,7 @@ export default function Browse() {
                       </div>
                     )}
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 10 }}>
-                      {(w.tags || []).slice(0, 4).map(t => <span className="tag-chip" key={t} style={{ fontSize: 10 }}>{t}</span>)}
+                      {allTags.map(t => <span className="tag-chip" key={t} style={{ fontSize: 10.5 }}>{t}</span>)}
                     </div>
                     <div style={{ marginTop: "auto", display: "flex", alignItems: "center", gap: 6 }}>
                       <button className={`reaction-btn ${myR === "like" ? "active-like" : ""}`} onClick={e => handleReact(e, w.id, "like")} disabled={!session} title={session ? "Like" : "Sign in"} style={{ padding: "4px 9px", fontSize: 11 }}>👍 {counts.likes}</button>
