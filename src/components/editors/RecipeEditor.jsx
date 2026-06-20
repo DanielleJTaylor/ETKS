@@ -56,7 +56,7 @@ function formatDeviceEntry(entry) {
 const INGREDIENT_CATEGORIES = [
   { id: "meat",    icon: "🍗", keywords: ["chicken", "beef", "pork", "turkey", "bacon", "sausage", "wing", "drumette", "steak", "lamb", "ham", "ground meat", "poultry"] },
   { id: "seafood", icon: "🐟", keywords: ["fish", "salmon", "shrimp", "tuna", "crab", "lobster", "scallop", "cod", "tilapia", "seafood"] },
-  { id: "dairy",   icon: "🥚", keywords: ["egg", "milk", "cream", "cheese", "butter", "yogurt", "dairy"] },
+  { id: "dairy",   icon: "🥛", keywords: ["egg", "milk", "cream", "cheese", "butter", "yogurt", "dairy"] },
   { id: "produce", icon: "🥦", keywords: ["onion", "garlic", "tomato", "lettuce", "carrot", "potato", "pepper bell", "broccoli", "spinach", "lemon", "lime", "apple", "banana", "berry", "vegetable", "fruit", "mushroom", "celery", "cucumber"] },
   { id: "grain",   icon: "🌾", keywords: ["flour", "cornstarch", "starch", "rice", "pasta", "noodle", "macaroni", "bread", "bun", "oat", "tortilla", "grain"] },
   { id: "spice",   icon: "🌶️", keywords: ["chili", "paprika", "cumin", "cayenne", "spice", "powder", "pepper black", "black pepper", "herb", "basil", "parsley", "cilantro", "thyme", "rosemary", "oregano", "salt"] },
@@ -69,9 +69,48 @@ const INGREDIENT_CATEGORIES = [
   { id: "alcohol", icon: "🍷", keywords: ["wine", "beer", "rum", "vodka", "whiskey", "alcohol", "liquor"] },
 ];
 
-// Auto-resolve an ingredient's category by matching its name against keywords.
+// Specific, well-known ingredients get their own exact icon rather than the
+// broader category icon (e.g. "banana" shows 🍌, not the produce category's
+// generic 🥦). Checked first; falls back to category-level matching below.
+const SPECIFIC_ICONS = [
+  [["banana"], "🍌"],
+  [["apple"], "🍎"],
+  [["lemon"], "🍋"],
+  [["lime"], "🍋"],
+  [["tomato"], "🍅"],
+  [["onion"], "🧅"],
+  [["garlic"], "🧄"],
+  [["carrot"], "🥕"],
+  [["potato"], "🥔"],
+  [["mushroom"], "🍄"],
+  [["pepper bell", "bell pepper"], "🫑"],
+  [["broccoli"], "🥦"],
+  [["cucumber"], "🥒"],
+  [["egg"], "🥚"],
+  [["butter"], "🧈"],
+  [["cheese"], "🧀"],
+  [["milk"], "🥛"],
+  [["bacon"], "🥓"],
+  [["chicken", "wing", "drumette", "poultry"], "🍗"],
+  [["beef", "steak"], "🥩"],
+  [["fish", "salmon", "cod", "tilapia"], "🐟"],
+  [["shrimp"], "🦐"],
+  [["bread", "bun"], "🍞"],
+  [["rice"], "🍚"],
+  [["pasta", "noodle", "macaroni"], "🍝"],
+  [["honey"], "🍯"],
+  [["chocolate", "cocoa"], "🍫"],
+  [["wine"], "🍷"],
+  [["beer"], "🍺"],
+];
+
+// Auto-resolve an ingredient's icon by matching its name — first against
+// specific well-known ingredients, then against broader categories.
 function guessCategory(name) {
   const n = (name || "").toLowerCase();
+  for (const [keywords, icon] of SPECIFIC_ICONS) {
+    if (keywords.some(k => n.includes(k))) return { icon };
+  }
   for (const cat of INGREDIENT_CATEGORIES) {
     if (cat.keywords.some(k => n.includes(k))) return cat;
   }
@@ -578,7 +617,7 @@ function StepEditor({ step, index, total, ingredients, session, workId, onUpdate
           {linkedIngredients.map(ing => (
             <span key={ing.id} className="tag-chip" style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
               <IngredientIcon name={nameOf(ing)} size={14} />
-              {nameOf(ing)}
+              {quantityOf(ing) ? `${quantityOf(ing)} ${nameOf(ing)}` : rawLine(ing)}
               <button onClick={() => onToggleIngredient(ing.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "inherit", fontSize: 12, padding: 0, marginLeft: 2 }}>×</button>
             </span>
           ))}
