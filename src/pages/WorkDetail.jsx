@@ -6,6 +6,7 @@ import ProseEditor, { ProseViewer } from "../components/editors/ProseEditor";
 import { ComicSection, PDFSection, ImageGallery } from "../components/editors/FormatEditors";
 import { RecipeSection } from "../components/editors/RecipeEditor";
 import CommentsSection from "../components/CommentsSection";
+import TagInput from "../components/TagInput";
 
 export default function WorkDetail() {
   const { id }       = useParams();
@@ -21,6 +22,8 @@ export default function WorkDetail() {
   const [authorName, setAuthorName] = useState(null);
   const [editMode, setEditMode]     = useState(false);
   const [workKey, setWorkKey]       = useState(0);
+  const [tags, setTags]             = useState([]);
+  const [tagSaving, setTagSaving]   = useState(false);
 
   // canEdit is true whenever the signed-in user owns this work — regardless
   // of which page they navigated from (Browse, Dashboard, a direct link, etc.)
@@ -30,12 +33,31 @@ export default function WorkDetail() {
     Works.fetchOne(id, session?.access_token).then(({ data, error: err }) => {
       if (err || !data) { setError("Work not found or not accessible."); setLoading(false); return; }
       setWork(data);
+      setTags(data.tags || []);
       setCounts({ likes: data.like_count || 0, dislikes: data.dislike_count || 0 });
       document.title = `${data.title} — E&TKS`;
       Profiles.fetchByIds([data.user_id]).then(names => setAuthorName(names[data.user_id] || null));
       setLoading(false);
     });
   }, [id, session]);
+
+  const saveTags = async (nextTags) => {
+    setTags(nextTags);
+    if (!session?.access_token || !work) return;
+    setTagSaving(true);
+    await Works.update(session.access_token, work.id, { tags: nextTags });
+    setTagSaving(false);
+  };
+
+  const addTag = (tag) => {
+    if (tags.includes(tag)) return;
+    if (tags.length >= 20) return;
+    saveTags([...tags, tag]);
+  };
+
+  const removeTag = (tag) => {
+    saveTags(tags.filter(t => t !== tag));
+  };
 
   useEffect(() => {
     if (!work || !session?.access_token) return;
@@ -136,11 +158,22 @@ export default function WorkDetail() {
           )}
         </div>
         {work.description && <div className="work-detail-desc">{work.description}</div>}
-        {(work.tags || []).length > 0 && (
-          <div className="work-detail-tags">
-            {(work.tags || []).map(t => <span className="tag-chip" key={t}>{t}</span>)}
-          </div>
-        )}
+        <div className="work-detail-tags" style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center", marginTop: 8 }}>
+          {tags.map(t => (
+            <span className="tag-chip" key={t} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+              {t}
+              {canEdit && (
+                <button onClick={() => removeTag(t)} style={{ background: "none", border: "none", cursor: "pointer", color: "inherit", fontSize: 12, padding: 0, marginLeft: 2 }}>×</button>
+              )}
+            </span>
+          ))}
+          {canEdit && (
+            <div style={{ display: "inline-flex", alignItems: "center", gap: 6, width: 180 }}>
+              <TagInput placeholder="Add tag…" onAdd={addTag} disabled={tags.length >= 20} />
+              {tagSaving && <span className="spinner" style={{ borderColor: "var(--gray-400)", borderTopColor: "transparent" }} />}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Reactions */}

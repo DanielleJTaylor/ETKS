@@ -2,7 +2,6 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../lib/AuthContext";
 import { Works } from "../lib/api";
-import TagInput from "../components/TagInput";
 
 const FORMATS = [
   { id: "prose",          name: "Prose",           desc: "Text, chapters & scenes" },
@@ -42,15 +41,6 @@ export default function EditWork() {
       setLoading(false);
     });
   }, [id, session]);
-
-  const addTag = (val) => {
-    const clean = val.trim().toLowerCase().replace(/\s+/g, " ");
-    if (!clean) return;
-    if (clean.split(" ").length > 3) return setError("Tags must be 1–3 words max.");
-    if (tags.includes(clean)) return;
-    if (tags.length >= 20) return setError("Maximum 20 tags.");
-    setTags([...tags, clean]); setError("");
-  };
 
   const save = async () => {
     setError("");
@@ -122,20 +112,6 @@ export default function EditWork() {
         <div style={{ fontSize: 12, color: "var(--gray-400)", marginTop: 8, lineHeight: 1.5 }}>
           Changing format only changes how the work page looks. Uploaded files and saved text are preserved.
         </div>
-      </div>
-
-      <div className="form-section">
-        <div className="section-mono">Tags</div>
-        <label className="label">Add Tags <span style={{ color: "var(--gray-400)", textTransform: "none", letterSpacing: 0, fontWeight: 400 }}>— 1–3 words each, max 20</span></label>
-        <div className="tags-input-wrap">
-          <TagInput placeholder="e.g. fantasy, horror, D&D 5e…" onAdd={addTag} />
-        </div>
-        {tags.length > 0 && (
-          <div className="tags-list">
-            {tags.map(t => <span className="tag-item" key={t}>{t}<button className="tag-remove" onClick={() => setTags(tags.filter(x => x !== t))}>×</button></span>)}
-          </div>
-        )}
-        {tags.length === 0 && <div style={{ fontSize: 12, color: "var(--gray-400)", marginTop: 8 }}>No tags yet.</div>}
       </div>
 
       <div className="form-section">
