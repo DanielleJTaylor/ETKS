@@ -170,7 +170,7 @@ export default function GlobalStyles() {
       .work-detail-title { font-family:var(--font-serif); font-size:clamp(24px,4vw,42px); font-weight:900; line-height:1.1; margin-bottom:12px; }
       .work-detail-meta { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:14px; }
       .work-detail-desc { font-size:15px; color:var(--gray-600); line-height:1.75; white-space:pre-wrap; }
-      .work-detail-tags { display:flex; flex-wrap:wrap; gap:6px; margin-top:14px; }
+      .work-detail-tags { display:flex; flex-direction:column; gap:6px; margin-top:14px; }
       .work-detail-reactions { display:flex; gap:8px; align-items:center; padding:16px 0; border-top:var(--border-thin); border-bottom:var(--border-thin); margin-bottom:28px; }
 
       /* Prose editor */
