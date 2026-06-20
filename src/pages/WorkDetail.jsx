@@ -176,27 +176,41 @@ export default function WorkDetail() {
           )}
         </div>
         {work.description && <div className="work-detail-desc">{work.description}</div>}
-        <div className="work-detail-tags" style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center", marginTop: 8 }}>
-          {tags.map(t => (
-            <span className="tag-chip" key={t} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-              {t}
-              {canEdit && (
-                <button onClick={() => removeTag(t)} style={{ background: "none", border: "none", cursor: "pointer", color: "inherit", fontSize: 12, padding: 0, marginLeft: 2 }}>×</button>
+        <div className="work-detail-tags" style={{ marginTop: 8 }}>
+          {(tags.length > 0 || canEdit) && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center", marginBottom: 6 }}>
+              {tags.map(t => (
+                <span className="tag-chip" key={t} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                  {t}
+                  {canEdit && (
+                    <button onClick={() => removeTag(t)} style={{ background: "none", border: "none", cursor: "pointer", color: "inherit", fontSize: 12, padding: 0, marginLeft: 2 }}>×</button>
+                  )}
+                </span>
+              ))}
+              {canEdit && tags.length < 20 && (
+                <div className="inline-tag-input" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                  <TagInput placeholder="+ Add tag" onAdd={addTag} disabled={tags.length >= 20} />
+                  {tagSaving && <span className="spinner" style={{ borderColor: "var(--gray-400)", borderTopColor: "transparent", width: 11, height: 11 }} />}
+                </div>
               )}
-            </span>
-          ))}
-          {canEdit && tags.length < 20 && (
-            <div className="inline-tag-input" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-              <TagInput placeholder="+ Add tag" onAdd={addTag} disabled={tags.length >= 20} />
-              {tagSaving && <span className="spinner" style={{ borderColor: "var(--gray-400)", borderTopColor: "transparent", width: 11, height: 11 }} />}
             </div>
           )}
-          {recipeAutoTags.diet.map(label => (
-            <span key={`diet-${label}`} className="tag-chip" style={{ background: "#eaf3de", borderColor: "#639922", color: "#3b6d11" }}>{label}</span>
-          ))}
-          {recipeAutoTags.ingredients.map(name => (
-            <span key={`ing-${name}`} className="tag-chip" style={{ fontSize: 10.5, background: "var(--gray-100)", color: "var(--gray-600)" }}>{name}</span>
-          ))}
+          {recipeAutoTags.diet.length > 0 && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center", marginBottom: 6 }}>
+              <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--gray-400)", marginRight: 2 }}>Diet:</span>
+              {recipeAutoTags.diet.map(label => (
+                <span key={`diet-${label}`} className="tag-chip" style={{ background: "#eaf3de", borderColor: "#639922", color: "#3b6d11" }}>{label}</span>
+              ))}
+            </div>
+          )}
+          {recipeAutoTags.ingredients.length > 0 && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
+              <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--gray-400)", marginRight: 2 }}>Ingredients:</span>
+              {recipeAutoTags.ingredients.map(name => (
+                <span key={`ing-${name}`} className="tag-chip" style={{ fontSize: 10.5, background: "var(--gray-100)", color: "var(--gray-600)" }}>{name}</span>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
