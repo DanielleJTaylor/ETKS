@@ -206,22 +206,50 @@ export function RecipeSection({ work, canEdit, session }) {
     setSavedAt(Date.now());
   };
 
-  if (editMode && canEdit) {
-    return (
-      <RecipeEditor
-        recipe={recipe}
-        work={work}
-        session={session}
-        onSave={persist}
-        onDone={() => setEditMode(false)}
-        saving={saving}
-        savedAt={savedAt}
-      />
-    );
-  }
-
   return (
-    <RecipeViewer recipe={recipe} canEdit={canEdit} onEdit={() => setEditMode(true)} />
+    <div>
+      {canEdit && (
+        <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
+          <button
+            onClick={() => setEditMode(false)}
+            style={{
+              fontFamily: "var(--font-sans)", fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em",
+              padding: "8px 18px", borderRadius: "var(--radius)", border: "2px solid var(--black)", cursor: "pointer",
+              background: !editMode ? "var(--black)" : "#fff", color: !editMode ? "#fff" : "var(--black)",
+            }}
+          >
+            👁 View
+          </button>
+          <button
+            onClick={() => setEditMode(true)}
+            style={{
+              fontFamily: "var(--font-sans)", fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em",
+              padding: "8px 18px", borderRadius: "var(--radius)", border: "2px solid var(--black)", cursor: "pointer",
+              background: editMode ? "var(--black)" : "#fff", color: editMode ? "#fff" : "var(--black)",
+            }}
+          >
+            ✏️ Edit
+          </button>
+          {savedAt && !saving && (
+            <span style={{ alignSelf: "center", fontSize: 11, color: "#3b6d11", marginLeft: 6 }}>✓ Saved</span>
+          )}
+        </div>
+      )}
+
+      {editMode && canEdit ? (
+        <RecipeEditor
+          recipe={recipe}
+          work={work}
+          session={session}
+          onSave={persist}
+          onDone={() => setEditMode(false)}
+          saving={saving}
+          savedAt={savedAt}
+        />
+      ) : (
+        <RecipeViewer recipe={recipe} canEdit={canEdit} onEdit={() => setEditMode(true)} />
+      )}
+    </div>
   );
 }
 
@@ -519,12 +547,6 @@ export function RecipeViewer({ recipe, canEdit, onEdit }) {
       {recipe.heroImage && (
         <div style={{ width: "100%", maxHeight: 460, overflow: "hidden", borderBottom: "var(--border-thin)" }}>
           <img src={recipe.heroImage} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
-        </div>
-      )}
-
-      {canEdit && (
-        <div style={{ padding: "10px 18px", background: "var(--gray-100)", borderBottom: "var(--border-thin)", display: "flex", justifyContent: "flex-end" }}>
-          <button className="btn btn-sm" onClick={onEdit}>✏️ Edit Recipe</button>
         </div>
       )}
 
