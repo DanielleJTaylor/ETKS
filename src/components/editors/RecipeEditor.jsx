@@ -122,22 +122,41 @@ function ImageUploadSlot({ url, onUpload, onRemove, session, workId, pathPrefix,
 }
 
 // ─── COMPACT INGREDIENT ROW ────────────────────────────────────────────────────
-// Single-line layout: tiny icon, amount, unit, name, diet-warning toggle, delete.
-// Diet pills only expand when the warning toggle is clicked, keeping the
-// default state compact so a long ingredient list doesn't take forever to fill in.
-// Reads the display quantity for an ingredient — prefers the new free-text
-// `quantity` field, falls back to legacy `amount`+`unit` for older recipes.
+// Single-line layout: tiny icon, one free-text ingredient line, diet-warning
+// toggle, delete. Diet pills only expand when the warning toggle is clicked,
+// keeping the default state compact so a long ingredient list doesn't take
+// forever to fill in.
+//
+// Ingredients are stored as one free-text `line` (e.g. "2 tbsp avocado oil").
+// `quantityOf` best-effort extracts a leading quantity for servings scaling;
+// `nameOf` strips that quantity back off for display/matching purposes.
+function rawLine(ing) {
+  if (ing.line != null) return ing.line;
+  // Backward-compat for recipes saved before this single-field format.
+  return [ing.quantity ?? [ing.amount, ing.unit].filter(Boolean).join(" "), ing.name].filter(Boolean).join(" ").trim();
+}
+
+const QTY_PATTERN = /^(\d+(?:\.\d+)?(?:\s*[-–]\s*\d+(?:\.\d+)?)?\s*(?:tsp|tbsp|cup|cups|oz|lb|lbs|g|kg|ml|l|pinch|clove|cloves|can|cans|slice|slices)?)\s+(.+)$/i;
+
 function quantityOf(ing) {
-  if (ing.quantity != null && ing.quantity !== "") return ing.quantity;
-  return [ing.amount, ing.unit].filter(Boolean).join(" ");
+  const line = rawLine(ing).trim();
+  const m = line.match(QTY_PATTERN);
+  return m ? m[1].trim() : "";
+}
+
+function nameOf(ing) {
+  const line = rawLine(ing).trim();
+  const m = line.match(QTY_PATTERN);
+  return m ? m[2].trim() : line;
 }
 
 function CompactIngredientRow({ ing, index, total, session, workId, onUpdate, onRemove, onToggleExclude, onMove }) {
   const [dietsOpen, setDietsOpen] = useState(false);
-  // A row "locks" into a compact read display once it has both a name and an
-  // amount — this keeps a long ingredient list scannable instead of every row
-  // permanently showing input fields. Click the pencil to unlock and edit again.
-  const isFilled = !!(ing.name?.trim() && quantityOf(ing).trim());
+  // A row "locks" into a compact read display once it has any text — this
+  // keeps a long ingredient list scannable instead of every row permanently
+  // showing an input field. Click the pencil to unlock and edit again.
+  const line = rawLine(ing);
+  const isFilled = !!line.trim();
   const [unlocked, setUnlocked] = useState(!isFilled);
   const brokenCount = (ing.excludes || []).length;
 
@@ -145,9 +164,9 @@ function CompactIngredientRow({ ing, index, total, session, workId, onUpdate, on
     return (
       <div style={{ border: "var(--border-thin)", borderRadius: 6, marginBottom: 6, overflow: "hidden" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px" }}>
-          <IngredientIcon name={ing.name} size={28} />
+          <IngredientIcon name={nameOf(ing)} size={28} />
           <div style={{ flex: 1, fontSize: 13 }}>
-            <strong>{quantityOf(ing)}</strong> {ing.name}
+            {line}
           </div>
           {brokenCount > 0 && (
             <span style={{ fontSize: 10.5, fontWeight: 700, color: "var(--red)", whiteSpace: "nowrap" }}>⚠ {brokenCount}</span>
@@ -166,12 +185,9 @@ function CompactIngredientRow({ ing, index, total, session, workId, onUpdate, on
   return (
     <div style={{ border: "var(--border-thin)", borderRadius: 6, marginBottom: 6, overflow: "hidden" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 8px" }}>
-        <IngredientIcon name={ing.name} size={34} />
-        <input className="input" type="text" placeholder="e.g. 2 tbsp, 1, to taste" value={ing.quantity ?? [ing.amount, ing.unit].filter(Boolean).join(" ")}
-          onChange={e => onUpdate({ quantity: e.target.value })}
-          style={{ width: 150, padding: "7px 10px", fontSize: 13, flexShrink: 0 }} />
-        <input className="input" type="text" placeholder="Ingredient name" value={ing.name}
-          onChange={e => onUpdate({ name: e.target.value })}
+        <IngredientIcon name={nameOf(ing)} size={34} />
+        <input className="input" type="text" placeholder="e.g. 2 tbsp avocado oil" value={line}
+          onChange={e => onUpdate({ line: e.target.value })}
           style={{ flex: 1, minWidth: 100, padding: "7px 10px", fontSize: 13 }} />
         <button
           onClick={() => setDietsOpen(o => !o)}
@@ -311,7 +327,7 @@ function RecipeEditor({ recipe, work, session, onSave, onDone, saving, savedAt }
   }, [baseServings, heroImage, ingredients, steps, notes]);
 
   const addIngredient = () => {
-    setIngredients([...ingredients, { id: uid(), amount: "", unit: "", name: "", excludes: [] }]);
+    setIngredients([...ingredients, { id: uid(), line: "", excludes: [] }]);
   };
   const updateIngredient = (id, patch) => {
     setIngredients(ingredients.map(i => i.id === id ? { ...i, ...patch } : i));
@@ -463,7 +479,7 @@ function StepEditor({ step, index, total, ingredients, session, workId, onUpdate
   const [confirmDelete, setConfirmDelete] = useState(false);
   const linkedIds = step.ingredientIds || [];
   const linkedIngredients = ingredients.filter(i => linkedIds.includes(i.id));
-  const availableIngredients = ingredients.filter(i => i.name.trim() && !linkedIds.includes(i.id));
+  const availableIngredients = ingredients.filter(i => rawLine(i).trim() && !linkedIds.includes(i.id));
 
   const handleDeleteClick = () => {
     if (confirmDelete) { onRemove(); return; }
@@ -516,8 +532,8 @@ function StepEditor({ step, index, total, ingredients, session, workId, onUpdate
           )}
           {linkedIngredients.map(ing => (
             <span key={ing.id} className="tag-chip" style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-              <IngredientIcon name={ing.name} size={14} />
-              {ing.name}
+              <IngredientIcon name={nameOf(ing)} size={14} />
+              {nameOf(ing)}
               <button onClick={() => onToggleIngredient(ing.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "inherit", fontSize: 12, padding: 0, marginLeft: 2 }}>×</button>
             </span>
           ))}
@@ -530,7 +546,7 @@ function StepEditor({ step, index, total, ingredients, session, workId, onUpdate
                 onClick={() => { onToggleIngredient(ing.id); }}
                 style={{ fontSize: 11, fontWeight: 600, padding: "4px 10px", borderRadius: 12, border: "1.5px solid var(--gray-200)", background: "#fff", color: "var(--gray-600)", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4 }}
               >
-                <IngredientIcon name={ing.name} size={14} />{ing.name}
+                <IngredientIcon name={nameOf(ing)} size={14} />{nameOf(ing)}
               </button>
             ))}
           </div>
@@ -658,10 +674,10 @@ export function RecipeViewer({ recipe, canEdit, onEdit }) {
                   >
                     {isChecked && <span style={{ color: "#fff", fontSize: 10, lineHeight: 1 }}>✓</span>}
                   </div>
-                  <IngredientIcon name={ing.name} size={38} />
+                  <IngredientIcon name={nameOf(ing)} size={38} />
                   <div style={{ flex: 1, opacity: isChecked ? 0.4 : 1 }}>
                     <div style={{ fontSize: 13, textDecoration: isChecked ? "line-through" : "none" }}>
-                      <strong>{fmtQuantity(quantityOf(ing))}</strong> {ing.name}
+                      {quantityOf(ing) ? <><strong>{fmtQuantity(quantityOf(ing))}</strong> {nameOf(ing)}</> : rawLine(ing)}
                     </div>
                   </div>
                 </div>
@@ -689,8 +705,8 @@ export function RecipeViewer({ recipe, canEdit, onEdit }) {
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
                     {linkedIngredients.map(ing => (
                       <span key={ing.id} className="tag-chip" style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 10.5 }}>
-                        <IngredientIcon name={ing.name} size={18} />
-                        {quantityOf(ing) ? `${fmtQuantity(quantityOf(ing))} ` : ""}{ing.name}
+                        <IngredientIcon name={nameOf(ing)} size={18} />
+                        {quantityOf(ing) ? `${fmtQuantity(quantityOf(ing))} ${nameOf(ing)}` : rawLine(ing)}
                       </span>
                     ))}
                     {tools.map((t, ti) => (
