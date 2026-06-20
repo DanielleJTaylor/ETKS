@@ -430,7 +430,7 @@ function RecipeEditor({ recipe, work, session, onSave, onDone, saving, savedAt }
     setIngredients(next);
   };
 
-  const addStep = () => setSteps([...steps, { id: uid(), title: "", content: "", image: null, ingredientIds: [], devices: [] }]);
+  const addStep = () => setSteps([...steps, { id: uid(), content: "", image: null, ingredientIds: [], devices: [] }]);
   const updateStep = (id, patch) => setSteps(steps.map(s => s.id === id ? { ...s, ...patch } : s));
   const removeStep = (id) => setSteps(steps.filter(s => s.id !== id));
   const moveStep = (idx, dir) => {
@@ -583,8 +583,7 @@ function StepEditor({ step, index, total, ingredients, session, workId, onUpdate
         <div style={{ flex: 1 }}>
           <div style={{ display: "flex", gap: 8, marginBottom: 8, alignItems: "center" }}>
             <span style={{ fontFamily: "var(--font-serif)", fontSize: 16, color: "var(--red)", minWidth: 28 }}>{index + 1}.</span>
-            <input className="input" type="text" placeholder="Step title (e.g. Make the dry rub)" value={step.title}
-              onChange={e => onUpdate({ title: e.target.value })} style={{ flex: 1 }} />
+            <span style={{ flex: 1, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--gray-400)" }}>Step {index + 1}</span>
             <button className="btn btn-sm" onClick={() => onMove(-1)} disabled={index === 0}>↑</button>
             <button className="btn btn-sm" onClick={() => onMove(1)} disabled={index === total - 1}>↓</button>
             <button
@@ -596,8 +595,8 @@ function StepEditor({ step, index, total, ingredients, session, workId, onUpdate
               {confirmDelete ? "Confirm? ×" : "×"}
             </button>
           </div>
-          <textarea className="input" placeholder="Step instructions…" value={step.content}
-            onChange={e => onUpdate({ content: e.target.value })} style={{ minHeight: 56 }} />
+          <textarea className="input" placeholder="Describe this step…" value={step.content}
+            onChange={e => onUpdate({ content: e.target.value })} style={{ minHeight: 90, fontSize: 14 }} />
         </div>
       </div>
 
@@ -805,9 +804,8 @@ export function RecipeViewer({ recipe, canEdit, onEdit }) {
                 {s.image && (
                   <img src={s.image} alt="" style={{ display: "block", maxWidth: "100%", width: "auto", height: "auto", maxHeight: 285, borderRadius: 10, marginBottom: 16, marginLeft: "auto", marginRight: "auto" }} />
                 )}
-                <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 6 }}>
+                <div style={{ marginBottom: 6 }}>
                   <span style={{ fontFamily: "var(--font-serif)", fontSize: 14, color: "var(--red)" }}>Step {i + 1}</span>
-                  {s.title && <span style={{ fontSize: 14, fontWeight: 700 }}>{s.title}</span>}
                 </div>
                 <div style={{ fontSize: 13.5, color: "var(--gray-600)", lineHeight: 1.7, marginBottom: 8 }}>{s.content}</div>
                 {(linkedIngredients.length > 0 || devices.length > 0) && (
