@@ -13,41 +13,49 @@ const DIET_TAGS = [
 
 const UNITS = ["", "g", "kg", "ml", "l", "tsp", "tbsp", "cup", "fl oz", "oz", "lb", "pinch"];
 
-// Lightweight default icon set keyed by common ingredient words. Authors can
-// override with a custom uploaded image per ingredient at any time.
-const ICON_MAP = [
-  [["flour", "cornstarch", "starch"], "🌾"],
-  [["chili", "pepper", "paprika", "spice", "powder", "cumin", "cayenne"], "🌶️"],
-  [["salt"], "🧂"],
-  [["garlic"], "🧄"],
-  [["onion"], "🧅"],
-  [["chicken", "wing", "drumette", "poultry"], "🍗"],
-  [["beef", "steak"], "🥩"],
-  [["egg"], "🥚"],
-  [["milk", "cream", "dairy"], "🥛"],
-  [["cheese"], "🧀"],
-  [["butter"], "🧈"],
-  [["honey"], "🍯"],
-  [["sauce", "bbq", "ketchup"], "🍶"],
-  [["oil"], "🫗"],
-  [["lemon", "lime", "citrus"], "🍋"],
-  [["tomato"], "🍅"],
-  [["herb", "basil", "parsley", "cilantro", "thyme", "rosemary"], "🌿"],
-  [["rice"], "🍚"],
-  [["pasta", "noodle", "macaroni", "mac"], "🍝"],
-  [["bread", "bun"], "🍞"],
-  [["sugar"], "🧁"],
-  [["water"], "💧"],
-  [["wine", "beer", "alcohol"], "🍷"],
-  [["nut", "almond", "peanut", "walnut", "cashew"], "🥜"],
+// Curated ingredient categories, each with keywords used to auto-match an
+// ingredient's typed name. No manual picker — the icon is always derived
+// automatically from what the author types. Unmatched ingredients show a
+// plain black circle.
+const INGREDIENT_CATEGORIES = [
+  { id: "meat",    icon: "🍗", keywords: ["chicken", "beef", "pork", "turkey", "bacon", "sausage", "wing", "drumette", "steak", "lamb", "ham", "ground meat", "poultry"] },
+  { id: "seafood", icon: "🐟", keywords: ["fish", "salmon", "shrimp", "tuna", "crab", "lobster", "scallop", "cod", "tilapia", "seafood"] },
+  { id: "dairy",   icon: "🥚", keywords: ["egg", "milk", "cream", "cheese", "butter", "yogurt", "dairy"] },
+  { id: "produce", icon: "🥦", keywords: ["onion", "garlic", "tomato", "lettuce", "carrot", "potato", "pepper bell", "broccoli", "spinach", "lemon", "lime", "apple", "banana", "berry", "vegetable", "fruit", "mushroom", "celery", "cucumber"] },
+  { id: "grain",   icon: "🌾", keywords: ["flour", "cornstarch", "starch", "rice", "pasta", "noodle", "macaroni", "bread", "bun", "oat", "tortilla", "grain"] },
+  { id: "spice",   icon: "🌶️", keywords: ["chili", "paprika", "cumin", "cayenne", "spice", "powder", "pepper black", "black pepper", "herb", "basil", "parsley", "cilantro", "thyme", "rosemary", "oregano", "salt"] },
+  { id: "sauce",   icon: "🍶", keywords: ["sauce", "bbq", "ketchup", "mustard", "mayo", "salsa", "dressing", "vinegar", "soy sauce"] },
+  { id: "oil",     icon: "🫗", keywords: ["oil", "fat", "lard", "shortening"] },
+  { id: "sugar",   icon: "🍯", keywords: ["sugar", "honey", "syrup", "molasses", "sweetener"] },
+  { id: "baking",  icon: "🧁", keywords: ["baking powder", "baking soda", "yeast", "vanilla", "chocolate", "cocoa"] },
+  { id: "liquid",  icon: "💧", keywords: ["water", "broth", "stock", "juice"] },
+  { id: "nut",     icon: "🥜", keywords: ["nut", "almond", "peanut", "walnut", "cashew", "pecan", "seed"] },
+  { id: "alcohol", icon: "🍷", keywords: ["wine", "beer", "rum", "vodka", "whiskey", "alcohol", "liquor"] },
 ];
 
-function guessIcon(name) {
+// Auto-resolve an ingredient's category by matching its name against keywords.
+function guessCategory(name) {
   const n = (name || "").toLowerCase();
-  for (const [keywords, icon] of ICON_MAP) {
-    if (keywords.some(k => n.includes(k))) return icon;
+  for (const cat of INGREDIENT_CATEGORIES) {
+    if (cat.keywords.some(k => n.includes(k))) return cat;
   }
-  return "🥄";
+  return null;
+}
+
+// Renders an ingredient's visual marker: auto-matched category emoji, or a
+// plain black circle if the typed name doesn't match any known category.
+function IngredientIcon({ name, size = 24 }) {
+  const cat = guessCategory(name);
+  return (
+    <span style={{
+      width: size, height: size, flexShrink: 0, borderRadius: "50%",
+      display: "flex", alignItems: "center", justifyContent: "center",
+      background: cat ? "var(--gray-100)" : "var(--black)",
+      fontSize: size * 0.55, lineHeight: 1,
+    }}>
+      {cat ? cat.icon : ""}
+    </span>
+  );
 }
 
 function uid() { return Math.random().toString(36).slice(2, 9); }
@@ -119,19 +127,41 @@ function ImageUploadSlot({ url, onUpload, onRemove, session, workId, pathPrefix,
 // Single-line layout: tiny icon, amount, unit, name, diet-warning toggle, delete.
 // Diet pills only expand when the warning toggle is clicked, keeping the
 // default state compact so a long ingredient list doesn't take forever to fill in.
-function CompactIngredientRow({ ing, session, workId, onUpdate, onRemove, onToggleExclude }) {
+function CompactIngredientRow({ ing, index, total, session, workId, onUpdate, onRemove, onToggleExclude, onMove }) {
   const [dietsOpen, setDietsOpen] = useState(false);
-  const [iconUploading, setIconUploading] = useState(false);
+  // A row "locks" into a compact read display once it has both a name and an
+  // amount — this keeps a long ingredient list scannable instead of every row
+  // permanently showing input fields. Click the pencil to unlock and edit again.
+  const isFilled = !!(ing.name?.trim() && String(ing.amount).trim());
+  const [unlocked, setUnlocked] = useState(!isFilled);
   const brokenCount = (ing.excludes || []).length;
+
+  if (isFilled && !unlocked) {
+    return (
+      <div style={{ border: "var(--border-thin)", borderRadius: 6, marginBottom: 6, overflow: "hidden" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px" }}>
+          <IngredientIcon name={ing.name} size={28} />
+          <div style={{ flex: 1, fontSize: 13 }}>
+            <strong>{ing.amount}{ing.unit ? ` ${ing.unit}` : ""}</strong> {ing.name}
+          </div>
+          {brokenCount > 0 && (
+            <span style={{ fontSize: 10.5, fontWeight: 700, color: "var(--red)", whiteSpace: "nowrap" }}>⚠ {brokenCount}</span>
+          )}
+          <div style={{ display: "flex", gap: 3, flexShrink: 0 }}>
+            <button onClick={() => onMove(-1)} disabled={index === 0} title="Move up" style={{ width: 24, height: 24, borderRadius: 5, border: "1.5px solid var(--gray-200)", background: "#fff", fontSize: 11, cursor: "pointer", opacity: index === 0 ? 0.35 : 1 }}>↑</button>
+            <button onClick={() => onMove(1)} disabled={index === total - 1} title="Move down" style={{ width: 24, height: 24, borderRadius: 5, border: "1.5px solid var(--gray-200)", background: "#fff", fontSize: 11, cursor: "pointer", opacity: index === total - 1 ? 0.35 : 1 }}>↓</button>
+            <button onClick={() => setUnlocked(true)} title="Edit" style={{ width: 24, height: 24, borderRadius: 5, border: "1.5px solid var(--gray-200)", background: "#fff", fontSize: 12, cursor: "pointer" }}>✏️</button>
+            <button onClick={onRemove} title="Remove" style={{ width: 24, height: 24, borderRadius: 5, border: "1.5px solid var(--black)", background: "var(--red)", color: "#fff", fontSize: 12, cursor: "pointer" }}>×</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ border: "var(--border-thin)", borderRadius: 6, marginBottom: 6, overflow: "hidden" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 8px" }}>
-        <ImageUploadSlot
-          url={ing.icon} session={session} workId={workId} pathPrefix="recipe/ingredients" label="icon"
-          size={34} uploading={iconUploading} setUploading={setIconUploading}
-          onUpload={url => onUpdate({ icon: url })} onRemove={() => onUpdate({ icon: null })}
-        />
+        <IngredientIcon name={ing.name} size={34} />
         <input className="input" type="text" placeholder="Amt" value={ing.amount}
           onChange={e => onUpdate({ amount: e.target.value })}
           style={{ width: 56, padding: "7px 8px", fontSize: 13, flexShrink: 0 }} />
@@ -155,6 +185,9 @@ function CompactIngredientRow({ ing, session, workId, onUpdate, onRemove, onTogg
         >
           ⚠ {brokenCount > 0 ? brokenCount : ""}
         </button>
+        {isFilled && (
+          <button onClick={() => setUnlocked(false)} title="Done" style={{ flexShrink: 0, width: 26, height: 26, borderRadius: 6, border: "1.5px solid var(--black)", background: "var(--black)", color: "#fff", fontSize: 12, cursor: "pointer" }}>✓</button>
+        )}
         <button onClick={onRemove} style={{ flexShrink: 0, width: 26, height: 26, borderRadius: 6, border: "1.5px solid var(--black)", background: "var(--red)", color: "#fff", fontSize: 13, cursor: "pointer", lineHeight: 1 }}>×</button>
       </div>
       {dietsOpen && (
@@ -266,7 +299,7 @@ function RecipeEditor({ recipe, work, session, onSave, onDone, saving, savedAt }
   const save = () => onSave({ baseServings, heroImage, ingredients, steps, notes });
 
   const addIngredient = () => {
-    setIngredients([...ingredients, { id: uid(), amount: "", unit: "", name: "", excludes: [], icon: null }]);
+    setIngredients([...ingredients, { id: uid(), amount: "", unit: "", name: "", excludes: [] }]);
   };
   const updateIngredient = (id, patch) => {
     setIngredients(ingredients.map(i => i.id === id ? { ...i, ...patch } : i));
@@ -282,6 +315,13 @@ function RecipeEditor({ recipe, work, session, onSave, onDone, saving, savedAt }
       const next = excludes.includes(dietId) ? excludes.filter(d => d !== dietId) : [...excludes, dietId];
       return { ...i, excludes: next };
     }));
+  };
+  const moveIngredient = (idx, dir) => {
+    const next = [...ingredients];
+    const target = idx + dir;
+    if (target < 0 || target >= next.length) return;
+    [next[idx], next[target]] = [next[target], next[idx]];
+    setIngredients(next);
   };
 
   const addStep = () => setSteps([...steps, { id: uid(), title: "", content: "", image: null, ingredientIds: [], tools: [] }]);
@@ -345,15 +385,18 @@ function RecipeEditor({ recipe, work, session, onSave, onDone, saving, savedAt }
           {ingredients.length === 0 && (
             <div style={{ fontSize: 13, color: "var(--gray-400)", marginBottom: 12 }}>No ingredients yet — add your first one below.</div>
           )}
-          {ingredients.map(ing => (
+          {ingredients.map((ing, idx) => (
             <CompactIngredientRow
               key={ing.id}
               ing={ing}
+              index={idx}
+              total={ingredients.length}
               session={session}
               workId={work.id}
               onUpdate={patch => updateIngredient(ing.id, patch)}
               onRemove={() => removeIngredient(ing.id)}
               onToggleExclude={dietId => toggleExclude(ing.id, dietId)}
+              onMove={dir => moveIngredient(idx, dir)}
             />
           ))}
           <button className="btn btn-sm" onClick={addIngredient}>+ Add Ingredient</button>
@@ -443,7 +486,7 @@ function StepEditor({ step, index, total, ingredients, session, workId, onUpdate
           )}
           {linkedIngredients.map(ing => (
             <span key={ing.id} className="tag-chip" style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-              {ing.icon ? <img src={ing.icon} alt="" style={{ width: 14, height: 14, borderRadius: 2, objectFit: "cover" }} /> : <span>{guessIcon(ing.name)}</span>}
+              <IngredientIcon name={ing.name} size={14} />
               {ing.name}
               <button onClick={() => onToggleIngredient(ing.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "inherit", fontSize: 12, padding: 0, marginLeft: 2 }}>×</button>
             </span>
@@ -457,7 +500,7 @@ function StepEditor({ step, index, total, ingredients, session, workId, onUpdate
                 onClick={() => { onToggleIngredient(ing.id); }}
                 style={{ fontSize: 11, fontWeight: 600, padding: "4px 10px", borderRadius: 12, border: "1.5px solid var(--gray-200)", background: "#fff", color: "var(--gray-600)", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4 }}
               >
-                <span>{ing.icon ? "" : guessIcon(ing.name)}</span>{ing.name}
+                <IngredientIcon name={ing.name} size={14} />{ing.name}
               </button>
             ))}
           </div>
@@ -500,7 +543,6 @@ function StepEditor({ step, index, total, ingredients, session, workId, onUpdate
 // ─── VIEWER ───────────────────────────────────────────────────────────────────
 export function RecipeViewer({ recipe, canEdit, onEdit }) {
   const [servings, setServings] = useState(recipe.baseServings || 4);
-  const [activeFilters, setActiveFilters] = useState(new Set());
   const [checked, setChecked]   = useState({});
 
   useEffect(() => { setServings(recipe.baseServings || 4); }, [recipe.baseServings]);
@@ -517,14 +559,6 @@ export function RecipeViewer({ recipe, canEdit, onEdit }) {
     const fracs = [[0.25, "¼"], [0.33, "⅓"], [0.5, "½"], [0.67, "⅔"], [0.75, "¾"]];
     for (const [f, sym] of fracs) if (Math.abs(frac - f) < 0.06) return (whole > 0 ? whole + " " : "") + sym;
     return v.toFixed(1);
-  };
-
-  const toggleFilter = (id) => {
-    setActiveFilters(prev => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
-    });
   };
 
   const ingredients = recipe.ingredients || [];
@@ -574,8 +608,6 @@ export function RecipeViewer({ recipe, canEdit, onEdit }) {
           <div style={{ marginBottom: 20 }}>
             <div className="section-mono" style={{ marginBottom: 10 }}>Ingredients</div>
             {ingredients.map(ing => {
-              const compatible = ingredientDiets(ing);
-              const conflict = [...activeFilters].some(f => !compatible.some(d => d.id === f));
               const isChecked = !!checked[ing.id];
               return (
                 <div key={ing.id} style={{ display: "flex", alignItems: "flex-start", gap: 8, padding: "7px 0", borderBottom: "0.5px solid var(--gray-200)" }}>
@@ -585,44 +617,15 @@ export function RecipeViewer({ recipe, canEdit, onEdit }) {
                   >
                     {isChecked && <span style={{ color: "#fff", fontSize: 10, lineHeight: 1 }}>✓</span>}
                   </div>
-                  {ing.icon ? (
-                    <img src={ing.icon} alt="" style={{ width: 38, height: 38, borderRadius: 6, objectFit: "cover", flexShrink: 0 }} />
-                  ) : (
-                    <span style={{ fontSize: 26, flexShrink: 0, width: 38, textAlign: "center" }}>{guessIcon(ing.name)}</span>
-                  )}
+                  <IngredientIcon name={ing.name} size={38} />
                   <div style={{ flex: 1, opacity: isChecked ? 0.4 : 1 }}>
                     <div style={{ fontSize: 13, textDecoration: isChecked ? "line-through" : "none" }}>
                       <strong>{fmtAmount(ing.amount)}{ing.unit ? ` ${ing.unit}` : ""}</strong> {ing.name}
-                      {conflict && <span style={{ color: "var(--red)", fontWeight: 700, marginLeft: 4 }}>⚠</span>}
                     </div>
                   </div>
                 </div>
               );
             })}
-          </div>
-
-          <div>
-            <div className="section-mono" style={{ marginBottom: 10 }}>Filter by Diet</div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
-              {DIET_TAGS.map(d => {
-                const active = activeFilters.has(d.id);
-                return (
-                  <button
-                    key={d.id}
-                    onClick={() => toggleFilter(d.id)}
-                    style={{
-                      fontSize: 10.5, fontWeight: 700, padding: "4px 10px", borderRadius: 12,
-                      border: "1.5px solid " + (active ? "#639922" : "var(--gray-200)"),
-                      background: active ? "#eaf3de" : "#fff",
-                      color: active ? "#3b6d11" : "var(--gray-600)",
-                      cursor: "pointer",
-                    }}
-                  >
-                    {d.label}
-                  </button>
-                );
-              })}
-            </div>
           </div>
         </div>
 
@@ -632,33 +635,29 @@ export function RecipeViewer({ recipe, canEdit, onEdit }) {
             const linkedIngredients = (s.ingredientIds || []).map(id => ingredientById[id]).filter(Boolean);
             const tools = s.tools || [];
             return (
-              <div key={s.id} style={{ marginBottom: 22 }}>
-                <div style={{ display: "flex", gap: 14 }}>
-                  {s.image && (
-                    <img src={s.image} alt="" style={{ width: 160, height: 160, objectFit: "cover", borderRadius: 8, border: "var(--border-thin)", flexShrink: 0 }} />
-                  )}
-                  <div style={{ flex: 1 }}>
-                    <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 6 }}>
-                      <span style={{ fontFamily: "var(--font-serif)", fontSize: 13, color: "var(--red)" }}>Step {i + 1}</span>
-                      {s.title && <span style={{ fontSize: 13, fontWeight: 700 }}>{s.title}</span>}
-                    </div>
-                    <div style={{ fontSize: 13, color: "var(--gray-600)", lineHeight: 1.65, marginBottom: 8 }}>{s.content}</div>
-                    {(linkedIngredients.length > 0 || tools.length > 0) && (
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
-                        {linkedIngredients.map(ing => (
-                          <span key={ing.id} className="tag-chip" style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 10.5 }}>
-                            {ing.icon ? <img src={ing.icon} alt="" style={{ width: 18, height: 18, borderRadius: 3, objectFit: "cover" }} /> : <span style={{ fontSize: 13 }}>{guessIcon(ing.name)}</span>}
-                            {ing.name}{ing.amount ? ` ${fmtAmount(ing.amount)}${ing.unit ? " " + ing.unit : ""}` : ""}
-                          </span>
-                        ))}
-                        {tools.map((t, ti) => (
-                          <span key={ti} className="tag-chip" style={{ fontSize: 10.5, background: "var(--gray-100)" }}>🔧 {t}</span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+              <div key={s.id} style={{ marginBottom: 26 }}>
+                {s.image && (
+                  <img src={s.image} alt="" style={{ width: "100%", maxHeight: 440, objectFit: "cover", borderRadius: 10, border: "var(--border-thin)", marginBottom: 16, display: "block" }} />
+                )}
+                <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 6 }}>
+                  <span style={{ fontFamily: "var(--font-serif)", fontSize: 14, color: "var(--red)" }}>Step {i + 1}</span>
+                  {s.title && <span style={{ fontSize: 14, fontWeight: 700 }}>{s.title}</span>}
                 </div>
-                {i < steps.length - 1 && <div style={{ height: "0.5px", background: "var(--gray-200)", marginTop: 18 }} />}
+                <div style={{ fontSize: 13.5, color: "var(--gray-600)", lineHeight: 1.7, marginBottom: 8 }}>{s.content}</div>
+                {(linkedIngredients.length > 0 || tools.length > 0) && (
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+                    {linkedIngredients.map(ing => (
+                      <span key={ing.id} className="tag-chip" style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 10.5 }}>
+                        <IngredientIcon name={ing.name} size={18} />
+                        {ing.name}{ing.amount ? ` ${fmtAmount(ing.amount)}${ing.unit ? " " + ing.unit : ""}` : ""}
+                      </span>
+                    ))}
+                    {tools.map((t, ti) => (
+                      <span key={ti} className="tag-chip" style={{ fontSize: 10.5, background: "var(--gray-100)" }}>🔧 {t}</span>
+                    ))}
+                  </div>
+                )}
+                {i < steps.length - 1 && <div style={{ height: "0.5px", background: "var(--gray-200)", marginTop: 20 }} />}
               </div>
             );
           })}
