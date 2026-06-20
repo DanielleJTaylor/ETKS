@@ -125,12 +125,19 @@ function ImageUploadSlot({ url, onUpload, onRemove, session, workId, pathPrefix,
 // Single-line layout: tiny icon, amount, unit, name, diet-warning toggle, delete.
 // Diet pills only expand when the warning toggle is clicked, keeping the
 // default state compact so a long ingredient list doesn't take forever to fill in.
+// Reads the display quantity for an ingredient — prefers the new free-text
+// `quantity` field, falls back to legacy `amount`+`unit` for older recipes.
+function quantityOf(ing) {
+  if (ing.quantity != null && ing.quantity !== "") return ing.quantity;
+  return [ing.amount, ing.unit].filter(Boolean).join(" ");
+}
+
 function CompactIngredientRow({ ing, index, total, session, workId, onUpdate, onRemove, onToggleExclude, onMove }) {
   const [dietsOpen, setDietsOpen] = useState(false);
   // A row "locks" into a compact read display once it has both a name and an
   // amount — this keeps a long ingredient list scannable instead of every row
   // permanently showing input fields. Click the pencil to unlock and edit again.
-  const isFilled = !!(ing.name?.trim() && String(ing.amount).trim());
+  const isFilled = !!(ing.name?.trim() && quantityOf(ing).trim());
   const [unlocked, setUnlocked] = useState(!isFilled);
   const brokenCount = (ing.excludes || []).length;
 
@@ -140,7 +147,7 @@ function CompactIngredientRow({ ing, index, total, session, workId, onUpdate, on
         <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px" }}>
           <IngredientIcon name={ing.name} size={28} />
           <div style={{ flex: 1, fontSize: 13 }}>
-            <strong>{ing.amount}{ing.unit ? ` ${ing.unit}` : ""}</strong> {ing.name}
+            <strong>{quantityOf(ing)}</strong> {ing.name}
           </div>
           {brokenCount > 0 && (
             <span style={{ fontSize: 10.5, fontWeight: 700, color: "var(--red)", whiteSpace: "nowrap" }}>⚠ {brokenCount}</span>
@@ -160,12 +167,9 @@ function CompactIngredientRow({ ing, index, total, session, workId, onUpdate, on
     <div style={{ border: "var(--border-thin)", borderRadius: 6, marginBottom: 6, overflow: "hidden" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 8px" }}>
         <IngredientIcon name={ing.name} size={34} />
-        <input className="input" type="text" placeholder="Amt" value={ing.amount}
-          onChange={e => onUpdate({ amount: e.target.value })}
-          style={{ width: 56, padding: "7px 8px", fontSize: 13, flexShrink: 0 }} />
-        <input className="input" type="text" placeholder="Unit" value={ing.unit}
-          onChange={e => onUpdate({ unit: e.target.value })}
-          style={{ width: 70, padding: "7px 8px", fontSize: 13, flexShrink: 0 }} />
+        <input className="input" type="text" placeholder="e.g. 2 tbsp, 1, to taste" value={ing.quantity ?? [ing.amount, ing.unit].filter(Boolean).join(" ")}
+          onChange={e => onUpdate({ quantity: e.target.value })}
+          style={{ width: 150, padding: "7px 10px", fontSize: 13, flexShrink: 0 }} />
         <input className="input" type="text" placeholder="Ingredient name" value={ing.name}
           onChange={e => onUpdate({ name: e.target.value })}
           style={{ flex: 1, minWidth: 100, padding: "7px 10px", fontSize: 13 }} />
@@ -456,9 +460,16 @@ function StepEditor({ step, index, total, ingredients, session, workId, onUpdate
   const [imgUploading, setImgUploading] = useState(false);
   const [ingPickerOpen, setIngPickerOpen] = useState(false);
   const [toolInputOpen, setToolInputOpen] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const linkedIds = step.ingredientIds || [];
   const linkedIngredients = ingredients.filter(i => linkedIds.includes(i.id));
   const availableIngredients = ingredients.filter(i => i.name.trim() && !linkedIds.includes(i.id));
+
+  const handleDeleteClick = () => {
+    if (confirmDelete) { onRemove(); return; }
+    setConfirmDelete(true);
+    setTimeout(() => setConfirmDelete(false), 3000);
+  };
 
   return (
     <div style={{ border: "var(--border-thin)", borderRadius: 6, padding: 12, marginBottom: 10 }}>
@@ -475,7 +486,14 @@ function StepEditor({ step, index, total, ingredients, session, workId, onUpdate
               onChange={e => onUpdate({ title: e.target.value })} style={{ flex: 1 }} />
             <button className="btn btn-sm" onClick={() => onMove(-1)} disabled={index === 0}>↑</button>
             <button className="btn btn-sm" onClick={() => onMove(1)} disabled={index === total - 1}>↓</button>
-            <button className="btn btn-sm" onClick={onRemove} style={{ background: "var(--red)", color: "#fff", borderColor: "var(--black)" }}>×</button>
+            <button
+              onClick={handleDeleteClick}
+              onBlur={() => setConfirmDelete(false)}
+              className="btn btn-sm"
+              style={{ background: "var(--red)", color: "#fff", borderColor: "var(--black)", whiteSpace: "nowrap", minWidth: confirmDelete ? 100 : undefined }}
+            >
+              {confirmDelete ? "Confirm? ×" : "×"}
+            </button>
           </div>
           <textarea className="input" placeholder="Step instructions…" value={step.content}
             onChange={e => onUpdate({ content: e.target.value })} style={{ minHeight: 56 }} />
@@ -561,16 +579,27 @@ export function RecipeViewer({ recipe, canEdit, onEdit }) {
 
   const mult = servings / (recipe.baseServings || 1);
 
-  const fmtAmount = (raw) => {
-    const n = parseFloat(raw);
-    if (isNaN(n)) return raw;
+  // Scales the leading number in a free-text quantity string (e.g. "2 tbsp" -> "4 tbsp"
+  // at 2x servings) and leaves any non-numeric text (units, "to taste", etc.) untouched.
+  const fmtQuantity = (raw) => {
+    const str = String(raw ?? "").trim();
+    if (!str) return str;
+    const match = str.match(/^(-?\d+(?:\.\d+)?)(.*)$/);
+    if (!match) return str; // no leading number — e.g. "to taste"
+    const n = parseFloat(match[1]);
+    const rest = match[2];
     const v = n * mult;
-    if (v === Math.floor(v)) return String(v);
-    const whole = Math.floor(v);
-    const frac = v - whole;
-    const fracs = [[0.25, "¼"], [0.33, "⅓"], [0.5, "½"], [0.67, "⅔"], [0.75, "¾"]];
-    for (const [f, sym] of fracs) if (Math.abs(frac - f) < 0.06) return (whole > 0 ? whole + " " : "") + sym;
-    return v.toFixed(1);
+    let formatted;
+    if (v === Math.floor(v)) {
+      formatted = String(v);
+    } else {
+      const whole = Math.floor(v);
+      const frac = v - whole;
+      const fracs = [[0.25, "¼"], [0.33, "⅓"], [0.5, "½"], [0.67, "⅔"], [0.75, "¾"]];
+      const match2 = fracs.find(([f]) => Math.abs(frac - f) < 0.06);
+      formatted = match2 ? (whole > 0 ? whole + " " : "") + match2[1] : v.toFixed(1);
+    }
+    return formatted + rest;
   };
 
   const ingredients = recipe.ingredients || [];
@@ -632,7 +661,7 @@ export function RecipeViewer({ recipe, canEdit, onEdit }) {
                   <IngredientIcon name={ing.name} size={38} />
                   <div style={{ flex: 1, opacity: isChecked ? 0.4 : 1 }}>
                     <div style={{ fontSize: 13, textDecoration: isChecked ? "line-through" : "none" }}>
-                      <strong>{fmtAmount(ing.amount)}{ing.unit ? ` ${ing.unit}` : ""}</strong> {ing.name}
+                      <strong>{fmtQuantity(quantityOf(ing))}</strong> {ing.name}
                     </div>
                   </div>
                 </div>
@@ -649,7 +678,7 @@ export function RecipeViewer({ recipe, canEdit, onEdit }) {
             return (
               <div key={s.id} style={{ marginBottom: 26 }}>
                 {s.image && (
-                  <img src={s.image} alt="" style={{ width: "100%", maxHeight: 216, objectFit: "cover", borderRadius: 10, border: "var(--border-thin)", marginBottom: 16, display: "block" }} />
+                  <img src={s.image} alt="" style={{ width: "100%", height: "auto", maxHeight: 248, objectFit: "contain", borderRadius: 10, border: "var(--border-thin)", marginBottom: 16, display: "block", background: "var(--gray-100)" }} />
                 )}
                 <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 6 }}>
                   <span style={{ fontFamily: "var(--font-serif)", fontSize: 14, color: "var(--red)" }}>Step {i + 1}</span>
@@ -661,7 +690,7 @@ export function RecipeViewer({ recipe, canEdit, onEdit }) {
                     {linkedIngredients.map(ing => (
                       <span key={ing.id} className="tag-chip" style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 10.5 }}>
                         <IngredientIcon name={ing.name} size={18} />
-                        {ing.name}{ing.amount ? ` ${fmtAmount(ing.amount)}${ing.unit ? " " + ing.unit : ""}` : ""}
+                        {quantityOf(ing) ? `${fmtQuantity(quantityOf(ing))} ` : ""}{ing.name}
                       </span>
                     ))}
                     {tools.map((t, ti) => (
