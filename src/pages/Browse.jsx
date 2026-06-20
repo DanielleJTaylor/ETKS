@@ -118,6 +118,14 @@ const DIET_TAGS = [
   { id: "vegan",       label: "Vegan"       },
 ];
 
+// Extracts the display name from a stored ingredient — handles both the
+// current single-line format and the legacy quantity/unit/name format.
+function ingredientNameOf(ing) {
+  const line = ing.line ?? [ing.quantity ?? [ing.amount, ing.unit].filter(Boolean).join(" "), ing.name].filter(Boolean).join(" ").trim();
+  const m = line.match(/^(\d+(?:\.\d+)?(?:\s*[-–]\s*\d+(?:\.\d+)?)?\s*(?:tsp|tbsp|cup|cups|oz|lb|lbs|g|kg|ml|l|pinch|clove|cloves|can|cans|slice|slices)?)\s+(.+)$/i);
+  return (m ? m[2] : line).trim();
+}
+
 function getFormatPreview(w) {
   // Image-bearing formats: comic/visual-novel/pdf/other use the batched _thumb;
   // recipe uses its own hero image stored in content.
@@ -140,7 +148,8 @@ function getFormatPreview(w) {
       const dietTags = DIET_TAGS
         .filter(d => ingCount > 0 && ingredients.every(ing => !(ing.excludes || []).includes(d.id)))
         .map(d => d.label);
-      return { text: bits.join(" · ") || null, image: r.heroImage || null, dietTags };
+      const ingredientTags = ingredients.map(ingredientNameOf).filter(Boolean);
+      return { text: bits.join(" · ") || null, image: r.heroImage || null, dietTags, ingredientTags };
     }
     if (w.format === "prose" && parsed.chapters) {
       const chCount = parsed.chapters.length;
@@ -311,11 +320,10 @@ export default function Browse() {
             </div>
           )}
 
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(420px, 1fr))", gap: 18 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             {results.map(w => {
               const counts = reactCounts[w.id] || { likes: 0, dislikes: 0 }; const myR = myReacts[w.id];
               const preview = getFormatPreview(w);
-              const allTags = [...(w.tags || []), ...(preview?.dietTags || [])];
               return (
                 <div
                   key={w.id}
@@ -329,7 +337,7 @@ export default function Browse() {
                   onMouseLeave={e => { e.currentTarget.style.transform = "none"; e.currentTarget.style.boxShadow = "none"; }}
                 >
                   {/* Preview block — image if available, otherwise a format-icon placeholder or text snippet */}
-                  <div style={{ position: "relative", width: 160, flexShrink: 0, background: preview?.image ? "transparent" : "var(--gray-100)", borderRight: "var(--border-thin)", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <div style={{ position: "relative", width: 200, flexShrink: 0, background: preview?.image ? "transparent" : "var(--gray-100)", borderRight: "var(--border-thin)", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center" }}>
                     {preview?.image ? (
                       <img src={preview.image} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                     ) : preview?.text ? (
@@ -355,9 +363,25 @@ export default function Browse() {
                         {preview.meta}
                       </div>
                     )}
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 10 }}>
-                      {allTags.map(t => <span className="tag-chip" key={t} style={{ fontSize: 10.5 }}>{t}</span>)}
-                    </div>
+                    {(w.tags?.length > 0 || preview?.dietTags?.length > 0 || preview?.ingredientTags?.length > 0) && (
+                      <div style={{ marginBottom: 8, display: "flex", flexDirection: "column", gap: 3 }}>
+                        {w.tags?.length > 0 && (
+                          <div style={{ display: "flex", gap: 4, overflowX: "auto", flexWrap: "nowrap" }} onClick={e => e.stopPropagation()}>
+                            {w.tags.map(t => <span className="tag-chip" key={t} style={{ fontSize: 10.5, whiteSpace: "nowrap", flexShrink: 0 }}>{t}</span>)}
+                          </div>
+                        )}
+                        {preview?.dietTags?.length > 0 && (
+                          <div style={{ display: "flex", gap: 4, overflowX: "auto", flexWrap: "nowrap" }} onClick={e => e.stopPropagation()}>
+                            {preview.dietTags.map(t => <span className="tag-chip" key={t} style={{ fontSize: 10.5, whiteSpace: "nowrap", flexShrink: 0, background: "#eaf3de", borderColor: "#639922", color: "#3b6d11" }}>{t}</span>)}
+                          </div>
+                        )}
+                        {preview?.ingredientTags?.length > 0 && (
+                          <div style={{ display: "flex", gap: 4, overflowX: "auto", flexWrap: "nowrap" }} onClick={e => e.stopPropagation()}>
+                            {preview.ingredientTags.map(t => <span className="tag-chip" key={t} style={{ fontSize: 10, whiteSpace: "nowrap", flexShrink: 0, background: "var(--gray-100)", color: "var(--gray-600)" }}>{t}</span>)}
+                          </div>
+                        )}
+                      </div>
+                    )}
                     <div style={{ marginTop: "auto", display: "flex", alignItems: "center", gap: 6 }}>
                       <button className={`reaction-btn ${myR === "like" ? "active-like" : ""}`} onClick={e => handleReact(e, w.id, "like")} disabled={!session} title={session ? "Like" : "Sign in"} style={{ padding: "4px 9px", fontSize: 11 }}>👍 {counts.likes}</button>
                       <button className={`reaction-btn ${myR === "dislike" ? "active-dislike" : ""}`} onClick={e => handleReact(e, w.id, "dislike")} disabled={!session} title={session ? "Dislike" : "Sign in"} style={{ padding: "4px 9px", fontSize: 11 }}>👎 {counts.dislikes}</button>

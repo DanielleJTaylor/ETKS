@@ -767,6 +767,15 @@ export function RecipeViewer({ recipe, canEdit, onEdit }) {
         </div>
       )}
 
+      {ingredients.length > 0 && (
+        <div style={{ padding: "10px 18px", borderBottom: "var(--border-thin)", display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
+          <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--gray-400)", marginRight: 2 }}>Ingredients:</span>
+          {[...new Set(ingredients.map(ing => nameOf(ing)).filter(Boolean))].map(name => (
+            <span key={name} className="tag-chip" style={{ fontSize: 10.5 }}>{name}</span>
+          ))}
+        </div>
+      )}
+
       <div style={{ display: "grid", gridTemplateColumns: "300px 1fr" }}>
         {/* Sidebar — ingredients + servings + filters */}
         <div style={{ borderRight: "var(--border-thin)", padding: 20 }}>
